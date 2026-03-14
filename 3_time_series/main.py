@@ -10,6 +10,7 @@ def main():
     parser.add_argument("--artifacts_dir", type=str, default="artifacts", help="Directory to store artifacts and logs.")
     parser.add_argument("--optimize", action="store_true", help="Run Optuna hyperparameter optimization before training.")
     parser.add_argument("--validate", action="store_true", help="Run validation on the last 6 months of the training set.")
+    parser.add_argument("--model", type=str, choices=["mlforecast", "baseline"], default="mlforecast", help="Choose the model to run.")
     args = parser.parse_args()
 
     # Configure Logguru
@@ -17,7 +18,7 @@ def main():
     logger.add(os.path.join(args.artifacts_dir, "pipeline_{time}.log"), rotation="10 MB")
 
     logger.info("Starting execution of main.py")
-    run_pipeline(args.data_path, args.artifacts_dir, optimize=args.optimize, validate=args.validate)
+    run_pipeline(args.data_path, args.artifacts_dir, optimize=args.optimize, validate=args.validate, model_type=args.model)
     logger.success("Execution completed successfully.")
 
 

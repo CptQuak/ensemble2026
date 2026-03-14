@@ -5,8 +5,9 @@ from loguru import logger
 from src.data_processing import load_data, process_and_aggregate
 from src.model_training import train_model
 from src.forecasting import generate_forecasts
+from src.baseline import run_baseline_model
 
-def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False, validate: bool = False):
+def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False, validate: bool = False, model_type: str = "mlforecast"):
     logger.info("Starting data processing pipeline...")
 
     # 1. Data Processing
@@ -17,19 +18,26 @@ def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False, val
         logger.error(f"Pipeline failed during data processing: {e}")
         return
 
-    # 2. Model Training
-    try:
-        mlf = train_model(df, optimize=optimize, validate=validate)
-    except Exception as e:
-        logger.error(f"Pipeline failed during model training: {e}")
-        return
+    if model_type == "baseline":
+        try:
+            predictions = run_baseline_model(df)
+        except Exception as e:
+            logger.error(f"Pipeline failed during baseline forecasting: {e}")
+            return
+    else:
+        # 2. Model Training
+        try:
+            mlf = train_model(df, optimize=optimize, validate=validate)
+        except Exception as e:
+            logger.error(f"Pipeline failed during model training: {e}")
+            return
 
-    # 3. Forecasting
-    try:
-        predictions = generate_forecasts(mlf, df, h=6)
-    except Exception as e:
-        logger.error(f"Pipeline failed during forecasting: {e}")
-        return
+        # 3. Forecasting
+        try:
+            predictions = generate_forecasts(mlf, df, h=6)
+        except Exception as e:
+            logger.error(f"Pipeline failed during forecasting: {e}")
+            return
 
     # Save artifacts
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

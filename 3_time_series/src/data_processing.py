@@ -48,7 +48,7 @@ def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
         .with_columns(pl.col("timedate").dt.truncate("1h").alias("Hour_Start"))
         .group_by(["deviceId", "Hour_Start"])
         .agg(
-            pl.col("x2").mean().alias("x2_mean"),
+            pl.col("x2").sum().alias("x2_mean"),
             pl.all().exclude(["deviceId", "timedate", "Hour_Start", "x2"]).mean()
         )
         .with_columns(

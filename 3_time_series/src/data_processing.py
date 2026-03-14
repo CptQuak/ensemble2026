@@ -5,7 +5,10 @@ from datetime import datetime
 def load_data(data_path: str) -> pl.LazyFrame:
     logger.info("Setting up lazy data processing...")
     try:
+        devices_path = data_path.replace("data.csv", "devices.csv")
         lazy_df = pl.scan_csv(data_path)
+        lazy_devices = pl.scan_csv(devices_path)
+        lazy_df = lazy_df.join(lazy_devices, on="deviceId", how="left")
         return lazy_df
     except Exception as e:
         logger.error(f"Failed to load data: {e}")
@@ -17,6 +20,7 @@ def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
         lazy_df.with_columns(
             pl.col("timedate").str.strip_suffix(" UTC").str.to_datetime()
         )
+        .drop("period", strict=False)
         .filter(pl.col("timedate") < datetime(2025, 5, 1))
         .sort(["deviceId", "timedate"])
         .with_columns(

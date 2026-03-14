@@ -54,13 +54,17 @@ def train_model(df: pl.DataFrame, optimize: bool = False, n_trials: int = 20) ->
             
             mlf = create_mlforecast_model(params)
             
+            static_cols = ['deviceType', 'latitude', 'longitude']
+            static_cols = [c for c in static_cols if c in forecast_df_pd.columns]
+            
             try:
                 # Time series CV: 4 windows (more robust than 2), predicting 720 hours ahead
                 cv_res = mlf.cross_validation(
                     df=forecast_df_pd,
                     h=720,
                     n_windows=4,
-                    step_size=720
+                    step_size=720,
+                    static_features=static_cols
                 )
                 # Calculate MAE
                 mae = mean_absolute_error(cv_res['y'], cv_res['LGBMRegressor'])
@@ -96,8 +100,11 @@ def train_model(df: pl.DataFrame, optimize: bool = False, n_trials: int = 20) ->
     logger.info("Training final model with best parameters...")
     final_mlf = create_mlforecast_model(best_params)
     
+    static_cols = ['deviceType', 'latitude', 'longitude']
+    static_cols = [c for c in static_cols if c in forecast_df_pd.columns]
+    
     try:
-        final_mlf.fit(forecast_df_pd)
+        final_mlf.fit(forecast_df_pd, static_features=static_cols)
         return final_mlf
     except Exception as e:
         logger.error(f"Error during final model fitting: {e}")

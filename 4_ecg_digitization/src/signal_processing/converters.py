@@ -42,7 +42,12 @@ class SignalConverter:
         nyquist = 0.5 * fs
         normal_cutoff = cutoff / nyquist
         b, a = butter(order, normal_cutoff, btype='low', analog=False)
-        return filtfilt(b, a, signal_500hz)
+        
+        if len(signal_500hz) <= max(len(a), len(b)):
+            return signal_500hz
+            
+        padlen = min(3 * max(len(a), len(b)), len(signal_500hz) - 1)
+        return filtfilt(b, a, signal_500hz, padlen=padlen)
 
     @staticmethod
     def resample_to_500hz_anchored(signal_mv, start_x_global, target_px_per_mm=20.0, 

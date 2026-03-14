@@ -14,7 +14,8 @@ def load_data(data_path: str) -> pl.LazyFrame:
         
         # Perform KMeans clustering
         coords = devices_df.select(["latitude", "longitude"]).to_numpy()
-        kmeans = KMeans(n_clusters=16, random_state=42, n_init="auto")
+        n_clusters = min(16, len(devices_df))
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init="auto")
         regions = kmeans.fit_predict(coords)
         
         # Add region column and drop raw coordinates

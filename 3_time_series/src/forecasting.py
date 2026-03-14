@@ -19,7 +19,7 @@ def generate_forecasts(mlf: MLForecast, df: pl.DataFrame, h: int = 6) -> pd.Data
     static_cols = ['deviceType', 'region']
     static_cols = [c for c in static_cols if c in train_df.columns]
     
-    exclude_features = ['x1', 'x3']
+    exclude_features = []
     dyn_cols = [c for c in train_df.columns if c not in ['unique_id', 'ds', 'y'] + static_cols + exclude_features]
     
     if dyn_cols or static_cols:

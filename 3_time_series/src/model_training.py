@@ -7,7 +7,34 @@ from loguru import logger
 import optuna
 from sklearn.metrics import mean_absolute_error
 import numpy as np
+import holidays
 
+def is_weekend(ds: pd.Series) -> np.ndarray:
+    return ds.dt.dayofweek.isin([5, 6]).astype(np.int8).values
+
+def is_holiday(ds: pd.Series) -> np.ndarray:
+    years = ds.dt.year.unique().tolist()
+    # Using Poland's holiday calendar as specified
+    holidays_dict = holidays.Poland(years=years)
+    return ds.dt.date.map(lambda x: x in holidays_dict).astype(np.int8).values
+
+def hour_sin(ds: pd.Series) -> np.ndarray:
+    return np.sin(2 * np.pi * ds.dt.hour / 24).values
+
+def hour_cos(ds: pd.Series) -> np.ndarray:
+    return np.cos(2 * np.pi * ds.dt.hour / 24).values
+
+def dayofweek_sin(ds: pd.Series) -> np.ndarray:
+    return np.sin(2 * np.pi * ds.dt.dayofweek / 7).values
+
+def dayofweek_cos(ds: pd.Series) -> np.ndarray:
+    return np.cos(2 * np.pi * ds.dt.dayofweek / 7).values
+
+def dayofyear_sin(ds: pd.Series) -> np.ndarray:
+    return np.sin(2 * np.pi * ds.dt.dayofyear / 365.25).values
+
+def dayofyear_cos(ds: pd.Series) -> np.ndarray:
+    return np.cos(2 * np.pi * ds.dt.dayofyear / 365.25).values
 
 def create_mlforecast_model(params: dict) -> MLForecast:
     return MLForecast(
@@ -31,6 +58,14 @@ def create_mlforecast_model(params: dict) -> MLForecast:
             "dayofyear",
             "is_month_start",
             "is_month_end",
+            is_weekend,
+            is_holiday,
+            hour_sin,
+            hour_cos,
+            dayofweek_sin,
+            dayofweek_cos,
+            dayofyear_sin,
+            dayofyear_cos,
         ],
     )
 

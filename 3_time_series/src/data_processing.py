@@ -36,7 +36,7 @@ def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
         lazy_df.with_columns(
             pl.col("timedate").str.strip_suffix(" UTC").str.to_datetime()
         )
-        .drop(["period", 'x1', 'x3'], strict=False)
+        .drop(["period"], strict=False)
         .filter(pl.col("timedate") < datetime(2025, 5, 1))
         .sort(["deviceId", "timedate"])
         .with_columns(

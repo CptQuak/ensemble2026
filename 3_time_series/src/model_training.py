@@ -83,7 +83,7 @@ def train_model(df: pl.DataFrame, optimize: bool = False, n_trials: int = 20) ->
         # Suppress verbose optuna logging
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study = optuna.create_study(direction="minimize")
-        study.optimize(objective, n_trials=n_trials)
+        study.optimize(objective, n_trials=n_trials, n_jobs=-1)
 
         best_params = study.best_params
         best_params['random_state'] = 42

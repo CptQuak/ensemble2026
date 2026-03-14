@@ -1,19 +1,21 @@
 import os
+import argparse
 from loguru import logger
 from src.pipeline import run_pipeline
 
 
 def main():
-    # Configure Logguru
-    os.makedirs("artifacts", exist_ok=True)
-    logger.add("artifacts/pipeline_{time}.log", rotation="10 MB")
+    parser = argparse.ArgumentParser(description="Run the time series forecasting pipeline.")
+    parser.add_argument("--data_path", type=str, default="data/subsample_data.csv", help="Path to the input CSV data.")
+    parser.add_argument("--artifacts_dir", type=str, default="artifacts", help="Directory to store artifacts and logs.")
+    args = parser.parse_args()
 
-    data_path = "data/data.csv"
-    devices_path = "data/devices.csv"
-    artifacts_dir = "artifacts"
+    # Configure Logguru
+    os.makedirs(args.artifacts_dir, exist_ok=True)
+    logger.add(os.path.join(args.artifacts_dir, "pipeline_{time}.log"), rotation="10 MB")
 
     logger.info("Starting execution of main.py")
-    run_pipeline(data_path, devices_path, artifacts_dir)
+    run_pipeline(args.data_path, args.artifacts_dir)
     logger.success("Execution completed successfully.")
 
 

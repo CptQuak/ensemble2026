@@ -101,6 +101,8 @@ def train_model(
         if col not in ["unique_id", "ds"]:
             forecast_df_pd[col] = forecast_df_pd.groupby("unique_id")[col].bfill()
 
+    forecast_df_pd['y'] = np.log1p(forecast_df_pd['y'])
+
     if optimize:
 
         def objective(trial):
@@ -132,6 +134,8 @@ def train_model(
                     static_features=static_cols,
                 )
                 # Calculate MAE
+                cv_res['y'] = np.expm1(cv_res['y'])
+                cv_res['LGBMRegressor'] = np.expm1(cv_res['LGBMRegressor'])
                 mae = mean_absolute_error(cv_res["y"], cv_res["LGBMRegressor"])
                 return mae
             except Exception as e:
@@ -182,6 +186,9 @@ def train_model(
                 n_windows=1,
                 static_features=static_cols,
             )
+            
+            cv_res['y'] = np.expm1(cv_res['y'])
+            cv_res['LGBMRegressor'] = np.expm1(cv_res['LGBMRegressor'])
             
             mae_hourly = mean_absolute_error(cv_res["y"], cv_res["LGBMRegressor"])
             logger.info(f"Validation MAE (Hourly, last 6 months): {mae_hourly}")

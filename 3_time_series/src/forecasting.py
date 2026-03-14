@@ -2,6 +2,7 @@ import pandas as pd
 import polars as pl
 from mlforecast import MLForecast
 from loguru import logger
+import numpy as np
 
 def generate_forecasts(mlf: MLForecast, df: pl.DataFrame, h: int = 6) -> pd.DataFrame:
     # 6 months x 30 days x 24 hours (approx)
@@ -46,6 +47,8 @@ def generate_forecasts(mlf: MLForecast, df: pl.DataFrame, h: int = 6) -> pd.Data
         predictions = mlf.predict(h=h_hours, X_df=X_df)
     else:
         predictions = mlf.predict(h=h_hours)
+    
+    predictions['LGBMRegressor'] = np.expm1(predictions['LGBMRegressor'])
     
     # Format according to example_submission.py
     # deviceId, year, month, prediction

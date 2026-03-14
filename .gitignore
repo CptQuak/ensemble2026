@@ -68,6 +68,7 @@ venv.bak/
 *.swo
 .DS_Store
 
-data/
-!data/.gitkeep
+train
+small_train
+data/.gitkeep
 output

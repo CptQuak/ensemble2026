@@ -3,9 +3,10 @@ import jsonlines
 import random
 import argparse
 
+import ast
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 
 from rank_bm25 import BM25Okapi
 
@@ -159,13 +160,158 @@ def trim_suffix(suffix: str):
     return suffix
 
 
+def get_python_chunks(code: str, file_path: str):
+    """
+    Rozbija kod Pythona na logiczne bloki (klasy, funkcje, zmienne globalne).
+    Zwraca listę słowników z treścią i metadanymi.
+    """
+    chunks = []
+    source_lines = code.splitlines()
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        # Jeśli plik ma błędy składni, tniemy go tradycyjnie, 
+        # ale zachowujemy strukturę słownika
+        clean_filename = os.path.basename(file_path)
+        fallback_chunks = []
+        
+        # Prosty podział po podwójnej nowej linii jako fallback
+        blocks = [b for b in code.split("\n\n") if len(b.strip()) > 20]
+        
+        for block in blocks:
+            # Tworzymy uproszczony prefiks dla wyszukiwarki
+            fallback_prefix = f"File: {clean_filename} | Syntax: ErrorFallback"
+            
+            fallback_chunks.append({
+                "search_content": f"{fallback_prefix}\n{block}",
+                "raw_code": block,
+                "file": file_path,
+                "metadata": {
+                    "file": clean_filename,
+                    "class": "None",
+                    "names": []
+                }
+            })
+        return fallback_chunks
+    
+    clean_filename = os.path.basename(file_path)
+
+    for node in ast.walk(tree):
+        # Obsługa klas i funkcji
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            # Wyciągamy dokładny segment kodu źródłowego dla danego węzła
+            start_line = node.lineno
+            end_line = getattr(node, "end_lineno", start_line + 5)
+            
+            # Pobieramy fragment tekstu (wersja dla Python 3.8+)
+            source_lines = code.splitlines()
+            segment = "\n".join(source_lines[start_line-1:end_line])
+            
+            # Budowanie inteligentnego prefiksu
+            class_name = "None"
+            # Sprawdzanie czy funkcja jest wewnątrz klasy
+            for parent in ast.walk(tree):
+                if isinstance(parent, ast.ClassDef) and node in parent.body:
+                    class_name = parent.name
+                    break
+
+            prefix = f"File: {clean_filename} | "
+            if isinstance(node, ast.ClassDef):
+                prefix += f"Class: {node.name}"
+            else:
+                prefix += f"Class: {class_name} | Function: {node.name}"
+
+            # Łączymy prefiks z kodem - to trafi do bazy FAISS
+            full_content = f"{prefix}\n{segment}"
+            
+            chunks.append({
+                "search_content": full_content,
+                "raw_code": segment,
+                "file": file_path,
+                "metadata": {
+                    "file": clean_filename, 
+                    "class": class_name, 
+                    "name": getattr(node, 'name', 'unknown')
+                }
+            })
+            
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            start_line = node.lineno
+            end_line = getattr(node, "end_lineno", start_line)
+
+            source_lines = code.splitlines()
+            segment = "\n".join(source_lines[start_line-1:end_line])
+            
+            # 1. Wyciągamy nazwy zmiennych/stałych
+            variable_names = []
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        variable_names.append(target.id)
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name):
+                    variable_names.append(node.target.id)
+
+            # 2. Filtrujemy tylko istotne przypisania
+            if segment.strip() and len(segment) > 5:
+                # 3. Ustalamy kontekst klasy (czy zmienna jest atrybutem klasy?)
+                class_name = "None"
+                for parent in ast.walk(tree):
+                    if isinstance(parent, ast.ClassDef) and node in parent.body:
+                        class_name = parent.name
+                        break
+
+                # 4. Budujemy ujednolicony prefiks dla FAISS i modelu
+                names_str = ", ".join(variable_names)
+                prefix = f"File: {clean_filename} | Class: {class_name} | Variables: {names_str}"
+                full_content = f"{prefix}\n{segment}"
+
+                # 5. Dodajemy do listy w nowym formacie
+                chunks.append({
+                    "search_content": full_content,
+                    "raw_code": segment,
+                    "file": file_path,
+                    "metadata": {
+                        "file": clean_filename,
+                        "class": class_name,
+                        "names": variable_names
+                    }
+                })
+            
+    return chunks
+
+
 class VectorContextManager:
-    def __init__(self, model_name='all-MiniLM-L6-v2'):
+    def __init__(
+            self, 
+            model_name='all-MiniLM-L6-v2', 
+            reranker_name='cross-encoder/ms-marco-MiniLM-L-6-v2'
+    ):
         # Inicjalizacja modelu do embeddingów - wybierz model zoptymalizowany pod kod
         self.model = SentenceTransformer(model_name)
         self.index = None
         self.chunks = []
         self.root_directory = None
+        self.reranker = CrossEncoder(reranker_name)
+
+    def rerank_chunks(self, query, retrieved_chunks, top_k=5):
+        """
+        Ocenia pobrane fragmenty pod kątem ich faktycznej relewantności dla zapytania.
+        """
+        if not retrieved_chunks:
+            return []
+
+        # Tworzymy pary [zapytanie, treść_fragmentu] do oceny
+        pairs = [[query, chunk["search_content"]] for chunk in retrieved_chunks]
+        
+        # Cross-Encoder przewiduje wynik (score) dla każdej pary
+        scores = self.reranker.predict(pairs)
+        
+        # Łączymy wyniki z fragmentami i sortujemy od najwyższego wyniku
+        ranked_results = sorted(zip(scores, retrieved_chunks), key=lambda x: x[0], reverse=True)
+        
+        # Zwracamy tylko najlepsze top_k fragmentów
+        return [res[1] for res in ranked_results[:top_k]]
 
     def index_repository(self, root_dir, extension=".py"):
         """Skanuje repozytorium, dzieli pliki na fragmenty i buduje indeks FAISS."""
@@ -180,12 +326,10 @@ class VectorContextManager:
                     path = os.path.join(dirpath, filename)
                     with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
-                        # Prosty chunking: dzieli plik na funkcje lub stałe bloki
-                        # Warto tu użyć biblioteki 'ast' dla lepszej precyzji w Pythonie
-                        chunks = [c for c in content.split("\n\n") if len(c.strip()) > 20]
-                        for chunk in chunks:
-                            self.chunks.append({"file": path, "content": chunk})
-                            all_texts.append(chunk)
+                        file_chunks = get_python_chunks(content, path)
+                        for chunk in file_chunks:
+                            self.chunks.append(chunk)
+                            all_texts.append(chunk["search_content"])
 
         if not all_texts:
             return
@@ -196,27 +340,27 @@ class VectorContextManager:
         self.index = faiss.IndexFlatL2(dimension)
         self.index.add(np.array(embeddings).astype('float32'))
 
-    def get_context(self, query, top_k=5):
+    def get_context(self, query, initial_top_k=20, final_top_k=5):
         """Wyszukuje najbardziej podobne fragmenty kodu."""
         if self.index is None:
             return ""
 
         query_vector = self.model.encode([query])
-        distances, indices = self.index.search(np.array(query_vector).astype('float32'), top_k)
+        distances, indices = self.index.search(np.array(query_vector).astype('float32'), initial_top_k)
+
+        candidates = [self.chunks[idx] for idx in indices[0] if idx != -1]
+
+        best_chunks = self.rerank_chunks(query, candidates, top_k=final_top_k)
 
         context_parts = []
-
-        for idx in indices[0]:
-            if idx == -1: continue
-            chunk = self.chunks[idx]
+        for chunk in best_chunks:
             rel_path = chunk["file"] # Ścieżka relatywna do repozytorium
             clean_file_name = rel_path[len(self.root_directory) + 1:]
-            
-            # Formatowanie
+
             formatted_chunk = FILE_COMPOSE_FORMAT.format(
                 file_sep=FILE_SEP_SYMBOL, 
                 file_name=clean_file_name, 
-                file_content=chunk["content"]
+                file_content=chunk["raw_code"]
             )
             context_parts.append(formatted_chunk)
             
@@ -262,7 +406,7 @@ with jsonlines.open(completion_points_file, 'r') as reader:
             if strategy == "vector":
                 query = f"{datapoint['prefix']} {datapoint['suffix']}"
                 # This returns the full formatted string with <|file_sep|> tokens
-                context = manager.get_context(query, top_k=5) 
+                context = manager.get_context(query, initial_top_k=20, final_top_k=5) 
             else:
                 if strategy == "random":
                     file_name = find_random_file(root_directory)

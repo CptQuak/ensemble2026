@@ -113,14 +113,8 @@ def generate_neural_forecasts(nf: NeuralForecast, df: pl.DataFrame) -> pd.DataFr
     static_cols = [c for c in static_cols if c in forecast_df_pd.columns]
     dyn_cols = [c for c in forecast_df_pd.columns if c not in ['unique_id', 'ds', 'y'] + static_cols]
     
-    # Create future exogenous variables
-    future_dates = pd.date_range(start=forecast_df_pd['ds'].max() + pd.Timedelta(hours=1), periods=h, freq='h')
-    unique_ids = forecast_df_pd['unique_id'].unique()
-    
-    future_df = pd.DataFrame({
-        'unique_id': np.repeat(unique_ids, len(future_dates)),
-        'ds': np.tile(future_dates, len(unique_ids))
-    })
+    # Create future exogenous variables using nf.make_future_dataframe
+    future_df = nf.make_future_dataframe(df=forecast_df_pd)
     
     # Add static features
     static_mapping = forecast_df_pd[['unique_id'] + static_cols].drop_duplicates()

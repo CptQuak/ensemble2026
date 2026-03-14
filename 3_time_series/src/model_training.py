@@ -144,9 +144,9 @@ def train_model(
 
         logger.info(f"Starting Optuna optimization with {n_trials} trials...")
         # Suppress verbose optuna logging
-        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        # optuna.logging.set_verbosity(optuna.logging.WARNING)
         study = optuna.create_study(direction="minimize")
-        study.optimize(objective, n_trials=n_trials, n_jobs=4)
+        study.optimize(objective, n_trials=n_trials, n_jobs=4, show_progress_bar=True)
 
         best_params = study.best_params
         best_params["random_state"] = 42

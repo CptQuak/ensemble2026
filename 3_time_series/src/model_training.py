@@ -66,7 +66,7 @@ def train_model(
 
         def objective(trial):
             params = {
-                "n_estimators": trial.suggest_int("n_estimators", 50, 300),
+                "n_estimators": trial.suggest_int("n_estimators", 100, 1000),
                 "learning_rate": trial.suggest_float(
                     "learning_rate", 1e-3, 0.3, log=True
                 ),
@@ -75,6 +75,7 @@ def train_model(
                 "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
                 "random_state": 42,
                 "verbose": -1,
+                "n_jobs": 4,  # Utilize all cores for training
             }
 
             mlf = create_mlforecast_model(params)
@@ -102,11 +103,12 @@ def train_model(
         # Suppress verbose optuna logging
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study = optuna.create_study(direction="minimize")
-        study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        study.optimize(objective, n_trials=n_trials, n_jobs=4)
 
         best_params = study.best_params
         best_params["random_state"] = 42
         best_params["verbose"] = -1
+        best_params["n_jobs"] = -1
         logger.info(f"Best parameters found: {best_params}")
         logger.info(f"Best Validation MAE: {study.best_value}")
     else:
@@ -119,7 +121,6 @@ def train_model(
             "num_leaves": 31,  # Standard default; prevents overfitting while respecting max_depth (31 < 2^6)
             "min_child_samples": 50,  # Increased to heavily regularize and prevent overfitting on specific noisy timestamps
             "colsample_bytree": 0.8,  # IMPORTANT: Randomly samples 80% of features per tree. Crucial when you have many highly correlated lag/rolling features.
-            "subsample": 0.8,  # Row-wise sampling to prevent overfitting on the training period
             "random_state": 42,
             "verbose": -1,
             "n_jobs": -1,  # Utilize all cores for training

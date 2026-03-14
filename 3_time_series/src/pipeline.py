@@ -24,6 +24,14 @@ def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False, val
         except Exception as e:
             logger.error(f"Pipeline failed during baseline forecasting: {e}")
             return
+    elif model_type in ["deepar", "nbeats", "nbeatsx"]:
+        from src.neural_forecasting import train_neural_model, generate_neural_forecasts
+        try:
+            nf_model = train_neural_model(df, model_type, optimize=optimize, validate=validate)
+            predictions = generate_neural_forecasts(nf_model, df)
+        except Exception as e:
+            logger.error(f"Pipeline failed during NeuralForecast: {e}")
+            return
     else:
         # 2. Model Training
         try:

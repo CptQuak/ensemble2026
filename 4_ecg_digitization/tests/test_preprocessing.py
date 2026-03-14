@@ -11,12 +11,10 @@ class TestPreprocessing(unittest.TestCase):
         
         # Test przetwarzania i zapisu do wyznaczonego folderu debug
         debug_dir = "output/debug/preprocessing"
-        mask = ECGPreprocessor.process(img_bgr, "test_rec", debug_folder=debug_dir)
+        mask = ECGPreprocessor.get_segmentation_mask(img_bgr, "test_rec", debug_folder=debug_dir)
         
         self.assertIsNotNone(mask)
-        self.assertTrue(os.path.exists(f"{debug_dir}/test_rec/step1_green_channel.png"))
-        self.assertTrue(os.path.exists(f"{debug_dir}/test_rec/step2_binary_otsu.png"))
-        self.assertTrue(os.path.exists(f"{debug_dir}/test_rec/step3_cleaned_mask.png"))
+        self.assertTrue(os.path.exists(f"{debug_dir}/test_rec/step2_segmentation_mask.png"))
 
 if __name__ == '__main__':
     unittest.main()

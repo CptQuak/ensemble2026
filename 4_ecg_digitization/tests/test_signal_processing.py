@@ -9,13 +9,11 @@ class TestSignalProcessing(unittest.TestCase):
         signal_px = np.array([50, 50, 40, 60, 50, np.nan, 50])
         debug_dir = "output/debug/signal_processing"
         
-        signal_mv = SignalConverter.px_to_mv(signal_px, px_per_mm=10, record_name="test_rec", lead_name="Lead_dummy", debug_folder=debug_dir)
+        signal_mv = SignalConverter.px_to_mv(signal_px, px_per_mm=10, record_name="test_rec", lead_name="Lead_dummy")
         self.assertIsNotNone(signal_mv)
-        self.assertTrue(os.path.exists(f"{debug_dir}/test_rec/step5_mv_Lead_dummy.png"))
         
         signal_resampled = SignalConverter.resample_to_500hz(signal_mv, current_len_mm=5, record_name="test_rec", lead_name="Lead_dummy", debug_folder=debug_dir)
         self.assertIsNotNone(signal_resampled)
-        self.assertTrue(os.path.exists(f"{debug_dir}/test_rec/step6_resampled_Lead_dummy.png"))
 
 if __name__ == '__main__':
     unittest.main()

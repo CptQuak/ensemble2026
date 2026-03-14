@@ -82,34 +82,3 @@ class GridDetector:
             
         return vertical_lines, horizontal_lines
 
-    @staticmethod
-    def find_intersections(vertical_lines, horizontal_lines, record_name=None, debug_folder="output/debug"):
-        """
-        Znajduje węzły siatki (przecięcia linii pionowych i poziomych).
-        """
-        # Przecięcie to logiczne AND między maską linii pionowych i poziomych
-        intersections_mask = cv2.bitwise_and(vertical_lines, horizontal_lines)
-        
-        # Znajdowanie środków klastrów (węzłów)
-        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(intersections_mask, connectivity=8)
-        
-        # Filtrujemy szum (zbyt małe lub zbyt duże klastry)
-        valid_centroids = []
-        for i in range(1, num_labels): # Pomijamy tło (i=0)
-            area = stats[i, cv2.CC_STAT_AREA]
-            if 4 <= area <= 100: # Węzeł powinien być małym punktem (ok. 2x2 do 10x10 px)
-                valid_centroids.append(centroids[i])
-                
-        valid_centroids = np.array(valid_centroids)
-        
-        if record_name and len(valid_centroids) > 0:
-            path_prefix = os.path.join(debug_folder, record_name)
-            
-            # Tworzymy kolorowy obraz z zaznaczonymi węzłami
-            debug_img = cv2.cvtColor(intersections_mask, cv2.COLOR_GRAY2BGR)
-            for cx, cy in valid_centroids:
-                cv2.circle(debug_img, (int(cx), int(cy)), 3, (0, 0, 255), -1)
-                
-            cv2.imwrite(f"{path_prefix}/step1f_intersections.png", debug_img)
-            
-        return valid_centroids

@@ -11,7 +11,7 @@ class TestSegmentation(unittest.TestCase):
         img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY) # Dodaj skale szarości
         
         # Maska potrzebna do wykrycia rzędów (wariancja)
-        mask = ECGPreprocessor.process(img_bgr, "test_rec", debug_folder="output/debug/temp")
+        mask = ECGPreprocessor.get_segmentation_mask(img_bgr, "test_rec", debug_folder="output/debug/temp")
         debug_dir = "output/debug/segmentation"
         
         row_boundaries = ECGSegmenter.find_horizontal_rows(mask, "test_rec", debug_folder=debug_dir)

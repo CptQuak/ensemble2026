@@ -11,6 +11,8 @@ import optuna
 from mlforecast import MLForecast
 from lightgbm import LGBMRegressor
 from prophet import Prophet
+from neuralforecast import NeuralForecast
+from neuralforecast.models import NBEATS
 
 from src.data_processing import load_data
 
@@ -287,11 +289,65 @@ def train_and_forecast_monthly_prophet(df: pl.DataFrame, validate: bool = False,
             
     return pd.concat(all_predictions, ignore_index=True)
 
+def train_and_forecast_monthly_nbeats(df: pl.DataFrame, validate: bool = False, val_months: int = 2):
+    logger.info(f"Setting up monthly NBEATS pipeline (Validate={validate}, Horizon={val_months} months)...")
+    train_df = df.rename(
+        {"deviceId": "unique_id", "Month_Start": "ds", "x2_mean": "y"}
+    ).to_pandas()
+    
+    train_df['ds'] = pd.to_datetime(train_df['ds']).astype('datetime64[ns]')
+    train_df['y'] = np.log1p(train_df['y'])
+    
+    # We only need to predict up to October 2025 (which is 6 months from May)
+    h_months = 6
+    
+    if validate:
+        logger.info(f"Running NBEATS validation on the last {val_months} months...")
+        min_len = train_df.groupby('unique_id').size().min()
+        if min_len <= val_months + 1:
+            logger.warning(f"Dataset too small for validation (min length {min_len}). Skipping validation.")
+        else:
+            fit_df = train_df.groupby('unique_id').head(-val_months).reset_index(drop=True)
+            val_df = train_df.groupby('unique_id').tail(val_months).reset_index(drop=True)
+            
+            model_val = NBEATS(h=val_months, input_size=1, max_steps=100)
+            nf_val = NeuralForecast(models=[model_val], freq='MS')
+            
+            # Use supress warnings and logs
+            import logging
+            logging.getLogger('pytorch_lightning').setLevel(logging.ERROR)
+            
+            nf_val.fit(df=fit_df)
+            forecast_val = nf_val.predict()
+            
+            if 'unique_id' not in forecast_val.columns:
+                forecast_val = forecast_val.reset_index(names='unique_id')
+                
+            merged = forecast_val.merge(val_df[['unique_id', 'ds', 'y']], on=['unique_id', 'ds'])
+            mae = mean_absolute_error(np.expm1(merged['y']), np.expm1(merged['NBEATS']))
+            logger.info(f"Validation MAE (Monthly, last {val_months} months) NBEATS: {mae}")
+            
+    logger.info("Training final monthly NBEATS model...")
+    model_final = NBEATS(h=h_months, input_size=1, max_steps=100)
+    nf_final = NeuralForecast(models=[model_final], freq='MS')
+    
+    import logging
+    logging.getLogger('pytorch_lightning').setLevel(logging.ERROR)
+    
+    nf_final.fit(df=train_df)
+    predictions = nf_final.predict()
+    
+    if 'unique_id' not in predictions.columns:
+        predictions = predictions.reset_index(names='unique_id')
+        
+    predictions['prediction'] = np.expm1(predictions['NBEATS'])
+    return predictions
+
 def main():
     parser = argparse.ArgumentParser(description="Run the monthly time series forecasting pipeline.")
     parser.add_argument("--data_path", type=str, default="data/data.csv", help="Path to the input CSV data.")
     parser.add_argument("--artifacts_dir", type=str, default="artifacts", help="Directory to store artifacts and logs.")
-    parser.add_argument("--model", type=str, choices=["lgbm", "prophet"], default="lgbm", help="Choose the model to run.")
+    parser.add_argument("--model", type=str, choices=["lgbm", "prophet", "nbeats"], default="lgbm", help="Choose the model to run.")
     parser.add_argument("--validate", action="store_true", help="Run validation on the hold-out set.")
     parser.add_argument("--val_months", type=int, default=2, help="Number of months to hold out for validation.")
     parser.add_argument("--optimize", action="store_true", help="Run Optuna hyperparameter optimization before training.")
@@ -307,8 +363,10 @@ def main():
     
     if args.model == "lgbm":
         predictions = train_and_forecast_monthly_lgbm(df, args.artifacts_dir, validate=args.validate, val_months=args.val_months, optimize=args.optimize, n_trials=args.n_trials)
-    else:
+    elif args.model == "prophet":
         predictions = train_and_forecast_monthly_prophet(df, validate=args.validate, val_months=args.val_months)
+    elif args.model == "nbeats":
+        predictions = train_and_forecast_monthly_nbeats(df, validate=args.validate, val_months=args.val_months)
     
     # Format output
     predictions['year'] = predictions['ds'].dt.year

@@ -10,7 +10,7 @@ def main():
     parser.add_argument("--artifacts_dir", type=str, default="artifacts", help="Directory to store artifacts and logs.")
     parser.add_argument("--optimize", action="store_true", help="Run Optuna hyperparameter optimization before training.")
     parser.add_argument("--validate", action="store_true", help="Run validation on the last 6 months of the training set.")
-    parser.add_argument("--model", type=str, choices=["mlforecast", "baseline", "deepar", "nbeats", "nbeatsx"], default="mlforecast", help="Choose the model to run.")
+    parser.add_argument("--model", type=str, choices=["mlforecast", "baseline", "deepar", "nbeats", "nbeatsx", "prophet"], default="mlforecast", help="Choose the model to run.")
     args = parser.parse_args()
 
     # Configure Logguru

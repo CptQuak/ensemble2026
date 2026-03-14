@@ -32,6 +32,13 @@ def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False, val
         except Exception as e:
             logger.error(f"Pipeline failed during NeuralForecast: {e}")
             return
+    elif model_type == "prophet":
+        from src.prophet_forecasting import run_prophet_model
+        try:
+            predictions = run_prophet_model(df)
+        except Exception as e:
+            logger.error(f"Pipeline failed during Prophet forecasting: {e}")
+            return
     else:
         # 2. Model Training
         try:

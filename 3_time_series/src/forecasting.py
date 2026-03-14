@@ -17,7 +17,7 @@ def generate_forecasts(mlf: MLForecast, df: pl.DataFrame, h: int = 6) -> pd.Data
         {"deviceId": "unique_id", "Hour_Start": "ds", "x2_mean": "y"}
     ).to_pandas()
     
-    static_cols = ['deviceType', 'region']
+    static_cols = ['deviceType', 'region', 'consumption_segment']
     static_cols = [c for c in static_cols if c in train_df.columns]
     
     exclude_features = []

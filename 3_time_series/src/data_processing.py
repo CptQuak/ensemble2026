@@ -60,6 +60,25 @@ def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
     )
 
     df = processed_lazy.collect()
+    
+    logger.info("Segmenting devices based on historical consumption...")
+    # Calculate historical consumption stats per device
+    device_stats = df.group_by("deviceId").agg(
+        pl.col("x2_mean").mean().alias("x2_mean_avg"),
+        pl.col("x2_mean").std().alias("x2_mean_std")
+    ).fill_null(0)
+    
+    # Perform KMeans clustering for consumption segmentation
+    n_cons_clusters = min(8, len(device_stats))
+    X_cons = device_stats.select(["x2_mean_avg", "x2_mean_std"]).to_numpy()
+    kmeans_cons = KMeans(n_clusters=n_cons_clusters, random_state=42, n_init="auto")
+    segments = kmeans_cons.fit_predict(X_cons)
+    
+    device_stats = device_stats.with_columns(pl.Series("consumption_segment", segments))
+    
+    # Join the segment back to the main DataFrame
+    df = df.join(device_stats.select(["deviceId", "consumption_segment"]), on="deviceId", how="left")
+    
     logger.info(f"Processed DataFrame shape: {df.shape}")
     logger.debug(f"\n{df.head()}")
     return df

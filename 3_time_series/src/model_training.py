@@ -121,7 +121,7 @@ def train_model(
 
             mlf = create_mlforecast_model(params)
 
-            static_cols = ["deviceType", "region"]
+            static_cols = ["deviceType", "region", "consumption_segment"]
             static_cols = [c for c in static_cols if c in forecast_df_pd.columns]
 
             try:
@@ -129,7 +129,7 @@ def train_model(
                 cv_res = mlf.cross_validation(
                     df=forecast_df_pd,
                     h=720,
-                    n_windows=4,
+                    n_windows=2,
                     step_size=720,
                     static_features=static_cols,
                 )
@@ -173,7 +173,7 @@ def train_model(
     logger.info("Training final model with best parameters...")
     final_mlf = create_mlforecast_model(best_params)
 
-    static_cols = ["deviceType", "region"]
+    static_cols = ["deviceType", "region", "consumption_segment"]
     static_cols = [c for c in static_cols if c in forecast_df_pd.columns]
 
     if validate:

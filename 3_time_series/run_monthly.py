@@ -99,10 +99,9 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
         return MLForecast(
             models={"LGBMRegressor": LGBMRegressor(**params)},
             freq="MS",
-            lags=[1, 2, 3, 6, 12],
+            lags=[1, 2],
             lag_transforms={
-                1: [(window_ops.rolling.rolling_mean, 3), (window_ops.rolling.rolling_mean, 6), (window_ops.rolling.rolling_mean, 12)],
-                2: [(window_ops.rolling.rolling_mean, 3)]
+                1: [(window_ops.rolling.rolling_mean, 2)]
             },
             date_features=["month", "year", "quarter"],
         )
@@ -128,10 +127,10 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
             
             max_len = forecast_df.groupby('unique_id').size().max()
             # Need max_len >= val_months * n_windows + max_lag + 1
-            if max_len < val_months * 2 + 13:
+            if max_len < val_months * 2 + 3:
                 n_windows = 1
-                if max_len < val_months + 13:
-                    logger.warning(f"Dataset too small for optimization CV (max {max_len} months). Need {val_months + 13}. Returning inf.")
+                if max_len < val_months + 3:
+                    logger.warning(f"Dataset too small for optimization CV (max {max_len} months). Need {val_months + 3}. Returning inf.")
                     return float('inf')
             else:
                 n_windows = 2
@@ -178,7 +177,7 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
 
     if validate and not optimize:
         max_len = forecast_df.groupby('unique_id').size().max()
-        required_len = val_months + 13 # val_months + 12 lags + 1 training sample
+        required_len = val_months + 3 # val_months + 2 lags + 1 training sample
         if max_len < required_len:
             logger.warning(f"Dataset too small for validation (max {max_len} months per device). Need at least {required_len}. Skipping validation.")
         else:

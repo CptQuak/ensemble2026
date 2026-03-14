@@ -36,7 +36,9 @@ def train_model(df: pl.DataFrame, optimize: bool = False, n_trials: int = 20) ->
         .reset_index()
     )
     # Forward fill handles missing inner values, but we also ensure trailing/leading nans are filled if any
-    forecast_df_pd['y'] = forecast_df_pd.groupby('unique_id')['y'].bfill()
+    for col in forecast_df_pd.columns:
+        if col not in ['unique_id', 'ds']:
+            forecast_df_pd[col] = forecast_df_pd.groupby('unique_id')[col].bfill()
 
     if optimize:
         def objective(trial):

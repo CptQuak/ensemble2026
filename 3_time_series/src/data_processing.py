@@ -20,14 +20,17 @@ def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
         .filter(pl.col("timedate") < datetime(2025, 5, 1))
         .sort(["deviceId", "timedate"])
         .with_columns(
-            pl.col("x2")
+            pl.all().exclude(["deviceId", "timedate"])
             .fill_null(strategy="forward")
             .fill_null(strategy="backward")
             .over("deviceId")
         )
         .with_columns(pl.col("timedate").dt.truncate("1h").alias("Hour_Start"))
         .group_by(["deviceId", "Hour_Start"])
-        .agg(pl.col("x2").mean().alias("x2_mean"))
+        .agg(
+            pl.col("x2").mean().alias("x2_mean"),
+            pl.all().exclude(["deviceId", "timedate", "Hour_Start", "x2"]).mean()
+        )
     )
 
     df = processed_lazy.collect()

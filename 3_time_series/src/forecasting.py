@@ -1,8 +1,9 @@
 import pandas as pd
+import polars as pl
 from mlforecast import MLForecast
 from loguru import logger
 
-def generate_forecasts(mlf: MLForecast, h: int = 6) -> pd.DataFrame:
+def generate_forecasts(mlf: MLForecast, df: pl.DataFrame, h: int = 6) -> pd.DataFrame:
     # 6 months x 30 days x 24 hours (approx)
     # We need to predict until the end of October 2025.
     # The training data goes up to October 2024.
@@ -10,7 +11,37 @@ def generate_forecasts(mlf: MLForecast, h: int = 6) -> pd.DataFrame:
     h_hours = 365 * 24 + 10 * 24 # Over-forecast to be safe
     logger.info(f"Generating hourly forecasts for {h_hours} hours...")
     
-    predictions = mlf.predict(h=h_hours)
+    # 1. Prepare historical dataframe for exogenous variables
+    train_df = df.rename(
+        {"deviceId": "unique_id", "Hour_Start": "ds", "x2_mean": "y"}
+    ).to_pandas()
+    
+    exo_cols = [c for c in train_df.columns if c not in ['unique_id', 'ds', 'y']]
+    
+    if exo_cols:
+        logger.info(f"Creating future exogenous variables for: {exo_cols}")
+        X_df = mlf.make_future_dataframe(h=h_hours)
+        
+        train_df['hour'] = train_df['ds'].dt.hour
+        hist_avg = train_df.groupby(['unique_id', 'hour'])[exo_cols].mean().reset_index()
+        
+        X_df['hour'] = X_df['ds'].dt.hour
+        X_df = X_df.merge(hist_avg, on=['unique_id', 'hour'], how='left')
+        
+        # Fill missing values: first by device mean, then by overall mean
+        device_mean = train_df.groupby('unique_id')[exo_cols].mean()
+        overall_mean = train_df[exo_cols].mean()
+        
+        for col in exo_cols:
+            device_mean_map = X_df['unique_id'].map(device_mean[col])
+            X_df[col] = X_df[col].fillna(device_mean_map)
+            X_df[col] = X_df[col].fillna(overall_mean[col])
+            
+        X_df = X_df.drop(columns=['hour'])
+        
+        predictions = mlf.predict(h=h_hours, X_df=X_df)
+    else:
+        predictions = mlf.predict(h=h_hours)
     
     # Format according to example_submission.py
     # deviceId, year, month, prediction

@@ -81,6 +81,7 @@ def train_neural_model(df: pl.DataFrame, model_name: str, optimize: bool = False
                              stack_types=['identity', 'trend', 'seasonality'],
                              n_blocks=[1, 1, 1],
                              mlp_units=[[256, 256], [256, 256], [256, 256]],
+                             batch_size=4, windows_batch_size=16,
                              max_steps=300, early_stop_patience_steps=patience))
     elif model_name == "nbeatsx":
         models.append(NBEATSx(h=h, input_size=input_size,
@@ -88,6 +89,7 @@ def train_neural_model(df: pl.DataFrame, model_name: str, optimize: bool = False
                               stack_types=['identity', 'trend', 'seasonality'],
                               n_blocks=[1, 1, 1],
                               mlp_units=[[256, 256], [256, 256], [256, 256]],
+                              batch_size=4, windows_batch_size=16,
                               max_steps=300, early_stop_patience_steps=patience))
     else:
         raise ValueError(f"Unsupported model: {model_name}")

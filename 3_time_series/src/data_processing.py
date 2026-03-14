@@ -1,14 +1,29 @@
 import polars as pl
 from loguru import logger
 from datetime import datetime
+from sklearn.cluster import KMeans
 
 def load_data(data_path: str) -> pl.LazyFrame:
     logger.info("Setting up lazy data processing...")
     try:
         devices_path = data_path.replace("data.csv", "devices.csv")
         lazy_df = pl.scan_csv(data_path)
-        lazy_devices = pl.scan_csv(devices_path)
-        lazy_df = lazy_df.join(lazy_devices, on="deviceId", how="left")
+        
+        # Load devices eagerly for clustering
+        devices_df = pl.read_csv(devices_path)
+        
+        # Perform KMeans clustering
+        coords = devices_df.select(["latitude", "longitude"]).to_numpy()
+        kmeans = KMeans(n_clusters=16, random_state=42, n_init="auto")
+        regions = kmeans.fit_predict(coords)
+        
+        # Add region column and drop raw coordinates
+        devices_df = devices_df.with_columns(pl.Series("region", regions))
+        devices_df = devices_df.drop(["latitude", "longitude"])
+        
+        # Join with main lazy frame
+        lazy_df = lazy_df.join(devices_df.lazy(), on="deviceId", how="left")
+        
         return lazy_df
     except Exception as e:
         logger.error(f"Failed to load data: {e}")

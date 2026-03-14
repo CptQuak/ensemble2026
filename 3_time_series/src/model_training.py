@@ -54,7 +54,7 @@ def train_model(df: pl.DataFrame, optimize: bool = False, n_trials: int = 20) ->
             
             mlf = create_mlforecast_model(params)
             
-            static_cols = ['deviceType', 'latitude', 'longitude']
+            static_cols = ['deviceType', 'region']
             static_cols = [c for c in static_cols if c in forecast_df_pd.columns]
             
             try:
@@ -100,7 +100,7 @@ def train_model(df: pl.DataFrame, optimize: bool = False, n_trials: int = 20) ->
     logger.info("Training final model with best parameters...")
     final_mlf = create_mlforecast_model(best_params)
     
-    static_cols = ['deviceType', 'latitude', 'longitude']
+    static_cols = ['deviceType', 'region']
     static_cols = [c for c in static_cols if c in forecast_df_pd.columns]
     
     try:

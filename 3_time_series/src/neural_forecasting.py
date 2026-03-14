@@ -141,8 +141,6 @@ def generate_neural_forecasts(nf: NeuralForecast, df: pl.DataFrame) -> pd.DataFr
             future_df[col] = future_df[col].fillna(device_mean_map)
             future_df[col] = future_df[col].fillna(overall_mean[col])
             
-        future_df = future_df.drop(columns=['hour'])
-        
     logger.info(f"Predicting...")
     predictions = nf.predict(df=forecast_df_pd, futr_df=future_df)
         

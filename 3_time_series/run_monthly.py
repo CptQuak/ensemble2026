@@ -5,6 +5,7 @@ import polars as pl
 import pandas as pd
 from loguru import logger
 import numpy as np
+import window_ops.rolling
 from sklearn.metrics import mean_absolute_error
 import optuna
 from mlforecast import MLForecast
@@ -98,18 +99,26 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
         return MLForecast(
             models={"LGBMRegressor": LGBMRegressor(**params)},
             freq="MS",
-            lags=[1, 2],
-            date_features=["month", "year"],
+            lags=[1, 2, 3, 6, 12],
+            lag_transforms={
+                1: [(window_ops.rolling.rolling_mean, 3), (window_ops.rolling.rolling_mean, 6), (window_ops.rolling.rolling_mean, 12)],
+                2: [(window_ops.rolling.rolling_mean, 3)]
+            },
+            date_features=["month", "year", "quarter"],
         )
 
     if optimize:
         def objective(trial):
             params = {
-                "n_estimators": trial.suggest_int("n_estimators", 50, 300),
+                "n_estimators": trial.suggest_int("n_estimators", 50, 400),
                 "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.3, log=True),
-                "num_leaves": trial.suggest_int("num_leaves", 10, 60),
-                "max_depth": trial.suggest_int("max_depth", 3, 8),
+                "num_leaves": trial.suggest_int("num_leaves", 10, 100),
+                "max_depth": trial.suggest_int("max_depth", 3, 10),
                 "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
+                "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+                "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
                 "random_state": 42,
                 "verbose": -1,
                 "n_jobs": -1
@@ -118,16 +127,20 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
             mlf_opt = create_monthly_mlf(params)
             
             max_len = forecast_df.groupby('unique_id').size().max()
-            required_len = val_months + 3
-            if max_len < required_len:
-                logger.warning(f"Dataset too small for optimization CV (max {max_len} months). Need {required_len}. Returning inf.")
-                return float('inf')
+            # Need max_len >= val_months * n_windows + max_lag + 1
+            if max_len < val_months * 2 + 13:
+                n_windows = 1
+                if max_len < val_months + 13:
+                    logger.warning(f"Dataset too small for optimization CV (max {max_len} months). Need {val_months + 13}. Returning inf.")
+                    return float('inf')
+            else:
+                n_windows = 2
                 
             try:
                 cv_res = mlf_opt.cross_validation(
                     df=forecast_df,
                     h=val_months,
-                    n_windows=1,
+                    n_windows=n_windows,
                     static_features=static_cols
                 )
                 cv_res['y'] = np.expm1(cv_res['y'])
@@ -150,9 +163,11 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
         logger.info(f"Best Validation MAE: {study.best_value}")
     else:
         best_params = {
-            "n_estimators": 100, 
+            "n_estimators": 150, 
             "learning_rate": 0.05, 
-            "max_depth": 4, 
+            "max_depth": 5,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
             "random_state": 42, 
             "verbose": -1,
             "n_jobs": -1
@@ -163,7 +178,7 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
 
     if validate and not optimize:
         max_len = forecast_df.groupby('unique_id').size().max()
-        required_len = val_months + 3 # val_months + 2 lags + 1 training sample
+        required_len = val_months + 13 # val_months + 12 lags + 1 training sample
         if max_len < required_len:
             logger.warning(f"Dataset too small for validation (max {max_len} months per device). Need at least {required_len}. Skipping validation.")
         else:

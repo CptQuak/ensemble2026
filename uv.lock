@@ -39,6 +39,7 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "seaborn" },
     { name = "statsforecast" },
+    { name = "window-ops" },
 ]
 
 [package.metadata]
@@ -61,6 +62,7 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "statsforecast", specifier = ">=2.0.3" },
+    { name = "window-ops", specifier = ">=0.0.15" },
 ]
 
 [[package]]
@@ -3568,6 +3570,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b3/8f/705086c9d734d3b663af0e9bb3d4de6578d08f46b1b101c2442fd9aecaa2/win32_setctime-1.2.0.tar.gz", hash = "sha256:ae1fdf948f5640aae05c511ade119313fb6a30d7eabe25fef9764dca5873c4c0", size = 4867, upload-time = "2024-12-07T15:28:28.314Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/07/c6fe3ad3e685340704d314d765b7912993bcb8dc198f0e7a89382d37974b/win32_setctime-1.2.0-py3-none-any.whl", hash = "sha256:95d644c4e708aba81dc3704a116d8cbc974d70b3bdb8be1d150e36be6e9d1390", size = 4083, upload-time = "2024-12-07T15:28:26.465Z" },
+]
+
+[[package]]
+name = "window-ops"
+version = "0.0.15"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numba" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/39/b6/ef47c9fd20fba724304ffd3f7c4384c07a40b0cc6d41a617d63dd185af0c/window_ops-0.0.15.tar.gz", hash = "sha256:3c762d35a38d562f34cda33a272ced2c8d5dd88bd050c13bc82a592cf668a535", size = 16702, upload-time = "2024-03-04T17:58:02.609Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/e5/da17e2a457af1c37113d5aeb683d306e19ee15ed037a47dd7e78ebd07d88/window_ops-0.0.15-py3-none-any.whl", hash = "sha256:7dbd18b467939ac5db3f6834c07e7ffb723691f5d86c22a39e707713d8ac86e3", size = 15405, upload-time = "2024-03-04T17:58:00.843Z" },
 ]
 
 [[package]]

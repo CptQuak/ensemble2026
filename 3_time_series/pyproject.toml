@@ -23,4 +23,5 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
     "statsforecast>=2.0.3",
+    "window-ops>=0.0.15",
 ]

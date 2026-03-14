@@ -6,8 +6,6 @@ import numpy as np
 
 def generate_forecasts(mlf: MLForecast, df: pl.DataFrame, h: int = 6) -> pd.DataFrame:
     # 6 months x 30 days x 24 hours (approx)
-    # We need to predict until the end of October 2025.
-    # The training data goes up to October 2024.
     # To cover May-Oct 2025, we need about a year of forecasts.
     h_hours = 365 * 24 + 10 * 24 # Over-forecast to be safe
     logger.info(f"Generating hourly forecasts for {h_hours} hours...")

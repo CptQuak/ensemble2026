@@ -75,7 +75,7 @@ def create_mlforecast_model(params: dict) -> MLForecast:
 
 
 def train_model(
-    df: pl.DataFrame, optimize: bool = False, n_trials: int = 20, validate: bool = False
+    df: pl.DataFrame, optimize: bool = False, n_trials: int = 40, validate: bool = False
 ) -> MLForecast:
     logger.info(f"Setting up forecasting pipeline (Optimize={optimize})...")
     forecast_df = df.rename(

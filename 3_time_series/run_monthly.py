@@ -43,7 +43,7 @@ def process_monthly(lazy_df: pl.LazyFrame) -> pl.DataFrame:
 
     df = processed_lazy.collect()
     
-    # Calculate historical consumption stats per device
+    # Calculate historical consumption stats per device (using the monthly data)
     device_stats = df.group_by("deviceId").agg(
         pl.col("x2_mean").mean().alias("x2_mean_avg"),
         pl.col("x2_mean").std().alias("x2_mean_std")
@@ -61,8 +61,8 @@ def process_monthly(lazy_df: pl.LazyFrame) -> pl.DataFrame:
     logger.info(f"Monthly DataFrame shape: {df.shape}")
     return df
 
-def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str):
-    logger.info("Setting up monthly LightGBM pipeline...")
+def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, validate: bool = False):
+    logger.info(f"Setting up monthly LightGBM pipeline (Validate={validate})...")
     forecast_df = df.rename(
         {"deviceId": "unique_id", "Month_Start": "ds", "x2_mean": "y"}
     ).to_pandas()
@@ -108,6 +108,23 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str):
         date_features=["month", "year"],
     )
 
+    if validate:
+        logger.info("Running cross-validation on the last 6 months...")
+        try:
+            cv_res = mlf.cross_validation(
+                df=forecast_df,
+                h=6,
+                n_windows=1,
+                static_features=static_cols
+            )
+            cv_res['y'] = np.expm1(cv_res['y'])
+            cv_res['LGBMRegressor'] = np.expm1(cv_res['LGBMRegressor'])
+            mae = mean_absolute_error(cv_res["y"], cv_res["LGBMRegressor"])
+            logger.info(f"Validation MAE (Monthly, last 6 months): {mae}")
+        except Exception as e:
+            logger.error(f"Error during validation: {e}")
+
+    logger.info("Training final monthly LightGBM model...")
     mlf.fit(forecast_df, static_features=static_cols)
     h_months = 12
     
@@ -133,8 +150,8 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str):
     predictions['prediction'] = np.expm1(predictions['LGBMRegressor'])
     return predictions
 
-def train_and_forecast_monthly_prophet(df: pl.DataFrame):
-    logger.info("Setting up monthly Prophet pipeline...")
+def train_and_forecast_monthly_prophet(df: pl.DataFrame, validate: bool = False):
+    logger.info(f"Setting up monthly Prophet pipeline (Validate={validate})...")
     train_df = df.rename(
         {"deviceId": "unique_id", "Month_Start": "ds", "x2_mean": "y"}
     ).to_pandas()
@@ -143,18 +160,47 @@ def train_and_forecast_monthly_prophet(df: pl.DataFrame):
     device_ids = train_df['unique_id'].unique()
     
     all_predictions = []
+    val_maes = []
     h_months = 12
+    val_months = 6
     
     for device_id in device_ids:
         device_df = train_df[train_df['unique_id'] == device_id][['ds', 'y']].dropna().sort_values('ds')
         
+        if validate:
+            if len(device_df) <= val_months + 1:
+                logger.warning(f"Device {device_id} does not have enough data for validation. Skipping validation.")
+                fit_df = device_df
+                run_val = False
+            else:
+                fit_df = device_df.iloc[:-val_months]
+                val_df = device_df.iloc[-val_months:]
+                run_val = True
+        else:
+            fit_df = device_df
+            run_val = False
+            
         m = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
         
         import logging
         logging.getLogger('cmdstanpy').setLevel(logging.WARNING)
         
         try:
-            m.fit(device_df)
+            m.fit(fit_df)
+            
+            if run_val:
+                future_val = m.make_future_dataframe(periods=val_months, freq='MS')
+                forecast_val = m.predict(future_val)
+                preds_val = forecast_val.tail(val_months)['yhat'].values
+                actuals_val = val_df['y'].values
+                
+                mae = mean_absolute_error(np.expm1(actuals_val), np.expm1(preds_val))
+                val_maes.append(mae)
+                
+                # Refit on all data
+                m = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
+                m.fit(device_df)
+                
             future = m.make_future_dataframe(periods=h_months, freq='MS')
             forecast = m.predict(future)
             
@@ -165,6 +211,9 @@ def train_and_forecast_monthly_prophet(df: pl.DataFrame):
         except Exception as e:
             logger.error(f"Prophet failed for device {device_id}: {e}")
             
+    if validate and val_maes:
+        logger.info(f"Validation MAE (Monthly, last 6 months) across valid devices: {np.mean(val_maes)}")
+            
     return pd.concat(all_predictions, ignore_index=True)
 
 def main():
@@ -172,6 +221,7 @@ def main():
     parser.add_argument("--data_path", type=str, default="data/subsample_data.csv", help="Path to the input CSV data.")
     parser.add_argument("--artifacts_dir", type=str, default="artifacts", help="Directory to store artifacts and logs.")
     parser.add_argument("--model", type=str, choices=["lgbm", "prophet"], default="lgbm", help="Choose the model to run.")
+    parser.add_argument("--validate", action="store_true", help="Run validation on the last 6 months of the training set.")
     args = parser.parse_args()
 
     os.makedirs(args.artifacts_dir, exist_ok=True)
@@ -182,9 +232,9 @@ def main():
     df = process_monthly(lazy_df)
     
     if args.model == "lgbm":
-        predictions = train_and_forecast_monthly_lgbm(df, args.artifacts_dir)
+        predictions = train_and_forecast_monthly_lgbm(df, args.artifacts_dir, validate=args.validate)
     else:
-        predictions = train_and_forecast_monthly_prophet(df)
+        predictions = train_and_forecast_monthly_prophet(df, validate=args.validate)
     
     # Format output
     predictions['year'] = predictions['ds'].dt.year

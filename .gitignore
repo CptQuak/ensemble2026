@@ -70,4 +70,4 @@ venv.bak/
 
 data/
 !data/.gitkeep
-
+output

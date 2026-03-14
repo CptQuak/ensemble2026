@@ -51,6 +51,12 @@ def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
             pl.col("x2").mean().alias("x2_mean"),
             pl.all().exclude(["deviceId", "timedate", "Hour_Start", "x2"]).mean()
         )
+        .with_columns(
+            pl.all().exclude(["deviceId", "Hour_Start", "x2_mean", "region", "deviceType"])
+            .mean()
+            .over(["region", "Hour_Start"])
+            .name.prefix("region_")
+        )
     )
 
     df = processed_lazy.collect()

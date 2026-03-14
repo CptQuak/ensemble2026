@@ -1,6 +1,7 @@
 import polars as pl
 import pandas as pd
 from mlforecast import MLForecast
+from mlforecast.lag_transforms import RollingMean, RollingStd, RollingMin, RollingMax
 from lightgbm import LGBMRegressor
 from loguru import logger
 import optuna
@@ -11,7 +12,12 @@ def create_mlforecast_model(params: dict) -> MLForecast:
     return MLForecast(
         models={'LGBMRegressor': LGBMRegressor(**params)},
         freq="h",
-        lags=[1, 24, 168],
+        lags=[1, 2,3, 4, 6, 12, 24, 48, 72, int(7*24), int(14*24), int(21*24)],
+        lag_transforms={
+            1: [RollingMean(window_size=24), RollingMean(window_size=168), 
+                RollingStd(window_size=24), RollingMin(window_size=24), RollingMax(window_size=24)],
+            24: [RollingMean(window_size=168)]
+        },
         date_features=["month", "hour", "dayofweek", "dayofyear", "is_month_start", "is_month_end"],
     )
 

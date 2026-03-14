@@ -58,7 +58,7 @@ class SignalConverter:
         """
         num_pixels = len(signal_mv)
         if num_pixels < 2:
-            return np.zeros(0, dtype=np.float16)
+            return np.zeros(2, dtype=np.float16)
         
         current_len_mm = num_pixels / target_px_per_mm
         

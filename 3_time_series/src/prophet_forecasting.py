@@ -3,9 +3,10 @@ import pandas as pd
 from prophet import Prophet
 from loguru import logger
 import numpy as np
+from sklearn.metrics import mean_absolute_error
 
-def run_prophet_model(df: pl.DataFrame) -> pd.DataFrame:
-    logger.info("Initializing Prophet forecasting...")
+def run_prophet_model(df: pl.DataFrame, validate: bool = False) -> pd.DataFrame:
+    logger.info(f"Initializing Prophet forecasting (Validate={validate})...")
     
     # 1. Prepare historical dataframe
     train_df = df.rename(
@@ -19,11 +20,15 @@ def run_prophet_model(df: pl.DataFrame) -> pd.DataFrame:
     logger.info(f"Training separate Prophet models for {len(device_ids)} devices.")
     
     all_predictions = []
+    val_maes = []
     
     # We need to predict until the end of October 2025.
     # The training data goes up to October 2024.
     # To cover May-Oct 2025, we need about a year of forecasts.
     h_hours = 365 * 24 + 10 * 24 # ~8900 hours, we do 9000 to be safe.
+    
+    # 6 months is approx 184 days = 4416 hours
+    val_hours = 4416
     
     for idx, device_id in enumerate(device_ids):
         if idx % 5 == 0:
@@ -33,6 +38,20 @@ def run_prophet_model(df: pl.DataFrame) -> pd.DataFrame:
         
         # Ensure 'ds' is strictly datetime and no missing values in target
         device_df = device_df.dropna(subset=['y'])
+        device_df = device_df.sort_values('ds')
+        
+        if validate:
+            if len(device_df) <= val_hours:
+                logger.warning(f"Device {device_id} does not have enough data for validation. Skipping validation for it.")
+                fit_df = device_df
+                run_val = False
+            else:
+                fit_df = device_df.iloc[:-val_hours]
+                val_df = device_df.iloc[-val_hours:]
+                run_val = True
+        else:
+            fit_df = device_df
+            run_val = False
         
         # Initialize Prophet with strong seasonality priors
         m = Prophet(
@@ -47,7 +66,30 @@ def run_prophet_model(df: pl.DataFrame) -> pd.DataFrame:
         logging.getLogger('cmdstanpy').setLevel(logging.WARNING)
         
         try:
-            m.fit(device_df)
+            m.fit(fit_df)
+            
+            if run_val:
+                future_val = m.make_future_dataframe(periods=val_hours, freq='h')
+                forecast_val = m.predict(future_val)
+                # Match predictions to validation set
+                preds_val = forecast_val.tail(val_hours)['yhat'].values
+                actuals_val = val_df['y'].values
+                
+                # Reverse log transformation for MAE calculation
+                preds_val_expm1 = np.expm1(preds_val)
+                actuals_val_expm1 = np.expm1(actuals_val)
+                
+                mae = mean_absolute_error(actuals_val_expm1, preds_val_expm1)
+                val_maes.append(mae)
+                
+                # Refit on all data if validate is True, because we still want to generate final forecasts
+                m = Prophet(
+                    yearly_seasonality=True,
+                    weekly_seasonality=True,
+                    daily_seasonality=True,
+                    changepoint_prior_scale=0.05
+                )
+                m.fit(device_df)
             
             future = m.make_future_dataframe(periods=h_hours, freq='h')
             forecast = m.predict(future)
@@ -61,6 +103,9 @@ def run_prophet_model(df: pl.DataFrame) -> pd.DataFrame:
         except Exception as e:
             logger.error(f"Prophet failed for device {device_id}: {e}")
             continue
+            
+    if validate and val_maes:
+        logger.info(f"Validation MAE (Hourly, last 6 months) across valid devices: {np.mean(val_maes)}")
             
     if not all_predictions:
         raise ValueError("Prophet failed for all devices.")

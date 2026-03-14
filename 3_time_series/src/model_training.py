@@ -36,7 +36,7 @@ def create_mlforecast_model(params: dict) -> MLForecast:
 
 
 def train_model(
-    df: pl.DataFrame, optimize: bool = False, n_trials: int = 20
+    df: pl.DataFrame, optimize: bool = False, n_trials: int = 20, validate: bool = False
 ) -> MLForecast:
     logger.info(f"Setting up forecasting pipeline (Optimize={optimize})...")
     forecast_df = df.rename(
@@ -132,6 +132,29 @@ def train_model(
 
     static_cols = ["deviceType", "region"]
     static_cols = [c for c in static_cols if c in forecast_df_pd.columns]
+
+    if validate:
+        logger.info("Running validation on the last 6 months of training data...")
+        try:
+            # 6 months is approx 184 days = 4416 hours
+            cv_res = final_mlf.cross_validation(
+                df=forecast_df_pd,
+                h=4416,
+                n_windows=1,
+                static_features=static_cols,
+            )
+            
+            mae_hourly = mean_absolute_error(cv_res["y"], cv_res["LGBMRegressor"])
+            logger.info(f"Validation MAE (Hourly, last 6 months): {mae_hourly}")
+            
+            cv_res['year'] = cv_res['ds'].dt.year
+            cv_res['month'] = cv_res['ds'].dt.month
+            monthly_val = cv_res.groupby(['unique_id', 'year', 'month'])[['y', 'LGBMRegressor']].mean().reset_index()
+            monthly_mae = mean_absolute_error(monthly_val['y'], monthly_val['LGBMRegressor'])
+            logger.info(f"Validation MAE (Monthly, last 6 months): {monthly_mae}")
+            
+        except Exception as e:
+            logger.error(f"Error during validation: {e}")
 
     try:
         final_mlf.fit(forecast_df_pd, static_features=static_cols)

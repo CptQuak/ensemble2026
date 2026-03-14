@@ -20,7 +20,7 @@ def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False, val
 
     if model_type == "baseline":
         try:
-            predictions = run_baseline_model(df)
+            predictions = run_baseline_model(df, validate=validate)
         except Exception as e:
             logger.error(f"Pipeline failed during baseline forecasting: {e}")
             return

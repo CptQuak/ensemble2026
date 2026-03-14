@@ -2,13 +2,55 @@ import polars as pl
 import pandas as pd
 from loguru import logger
 import numpy as np
+from sklearn.metrics import mean_absolute_error
 
-def run_baseline_model(df: pl.DataFrame) -> pd.DataFrame:
+def run_baseline_model(df: pl.DataFrame, validate: bool = False) -> pd.DataFrame:
     logger.info("Running alternative historical scaling model (baseline)...")
     pdf = df.select(["deviceId", "Hour_Start", "x2_mean"]).to_pandas()
     
     # Ensure Datetime
     pdf['Hour_Start'] = pd.to_datetime(pdf['Hour_Start'])
+    
+    if validate:
+        logger.info("Running validation on the last 6 months of training data...")
+        # Target: 2024-11-01 to 2025-05-01
+        mask_target = (pdf['Hour_Start'] >= '2024-11-01') & (pdf['Hour_Start'] < '2025-05-01')
+        target_df = pdf[mask_target].copy()
+        target_df['month'] = target_df['Hour_Start'].dt.month
+        actuals = target_df.groupby(['deviceId', 'month'])['x2_mean'].mean().reset_index()
+        actuals.rename(columns={'x2_mean': 'actual'}, inplace=True)
+        
+        # Learn Factor: 2024-05-01 to 2024-11-01 vs 2023-05-01 to 2023-11-01
+        mask_recent_factor = (pdf['Hour_Start'] >= '2024-05-01') & (pdf['Hour_Start'] < '2024-11-01')
+        mask_prior_factor = (pdf['Hour_Start'] >= '2023-05-01') & (pdf['Hour_Start'] < '2023-11-01')
+        
+        recent_factor_mean = pdf[mask_recent_factor].groupby('deviceId')['x2_mean'].mean()
+        prior_factor_mean = pdf[mask_prior_factor].groupby('deviceId')['x2_mean'].mean()
+        
+        val_factors = (recent_factor_mean / prior_factor_mean).fillna(1.0).replace([np.inf, -np.inf], 1.0)
+        val_factors = val_factors.clip(lower=0.5, upper=2.0)
+        
+        # Base values: 2023-11-01 to 2024-05-01
+        mask_base = (pdf['Hour_Start'] >= '2023-11-01') & (pdf['Hour_Start'] < '2024-05-01')
+        base_df = pdf[mask_base].copy()
+        base_df['month'] = base_df['Hour_Start'].dt.month
+        
+        base_monthly = base_df.groupby(['deviceId', 'month'])['x2_mean'].mean().reset_index()
+        
+        # Apply factor
+        base_monthly['factor'] = base_monthly['deviceId'].map(val_factors).fillna(1.0)
+        base_monthly['prediction'] = base_monthly['x2_mean'] * base_monthly['factor']
+        
+        # Join predictions with actuals
+        merged = pd.merge(actuals, base_monthly[['deviceId', 'month', 'prediction']], on=['deviceId', 'month'], how='left')
+        
+        # Fill any missing predictions with global mean
+        global_mean = pdf['x2_mean'].mean()
+        merged['prediction'] = merged['prediction'].fillna(global_mean)
+        
+        mae = mean_absolute_error(merged['actual'], merged['prediction'])
+        logger.info(f"Validation MAE (Monthly, last 6 months): {mae}")
+
     
     # 1. Past 6 months: Nov 2024 - Apr 2025
     mask_recent = (pdf['Hour_Start'] >= '2024-11-01') & (pdf['Hour_Start'] < '2025-05-01')

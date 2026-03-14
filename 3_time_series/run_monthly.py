@@ -6,6 +6,7 @@ import pandas as pd
 from loguru import logger
 import numpy as np
 from sklearn.metrics import mean_absolute_error
+import optuna
 from mlforecast import MLForecast
 from lightgbm import LGBMRegressor
 from prophet import Prophet
@@ -61,8 +62,8 @@ def process_monthly(lazy_df: pl.LazyFrame) -> pl.DataFrame:
     logger.info(f"Monthly DataFrame shape: {df.shape}")
     return df
 
-def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, validate: bool = False):
-    logger.info(f"Setting up monthly LightGBM pipeline (Validate={validate})...")
+def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, validate: bool = False, val_months: int = 2, optimize: bool = False, n_trials: int = 20):
+    logger.info(f"Setting up monthly LightGBM pipeline (Validate={validate}, Optimize={optimize}, Horizon={val_months} months)...")
     forecast_df = df.rename(
         {"deviceId": "unique_id", "Month_Start": "ds", "x2_mean": "y"}
     ).to_pandas()
@@ -93,36 +94,93 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
 
     forecast_df['y'] = np.log1p(forecast_df['y'])
 
-    mlf = MLForecast(
-        models={
-            "LGBMRegressor": LGBMRegressor(
-                n_estimators=100, 
-                learning_rate=0.05, 
-                max_depth=4, 
-                random_state=42, 
-                verbose=-1
-            )
-        },
-        freq="MS",
-        lags=[1, 2],
-        date_features=["month", "year"],
-    )
+    def create_monthly_mlf(params):
+        return MLForecast(
+            models={"LGBMRegressor": LGBMRegressor(**params)},
+            freq="MS",
+            lags=[1, 2],
+            date_features=["month", "year"],
+        )
 
-    if validate:
-        logger.info("Running cross-validation on the last 6 months...")
-        try:
-            cv_res = mlf.cross_validation(
-                df=forecast_df,
-                h=6,
-                n_windows=1,
-                static_features=static_cols
-            )
-            cv_res['y'] = np.expm1(cv_res['y'])
-            cv_res['LGBMRegressor'] = np.expm1(cv_res['LGBMRegressor'])
-            mae = mean_absolute_error(cv_res["y"], cv_res["LGBMRegressor"])
-            logger.info(f"Validation MAE (Monthly, last 6 months): {mae}")
-        except Exception as e:
-            logger.error(f"Error during validation: {e}")
+    if optimize:
+        def objective(trial):
+            params = {
+                "n_estimators": trial.suggest_int("n_estimators", 50, 300),
+                "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.3, log=True),
+                "num_leaves": trial.suggest_int("num_leaves", 10, 60),
+                "max_depth": trial.suggest_int("max_depth", 3, 8),
+                "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
+                "random_state": 42,
+                "verbose": -1,
+                "n_jobs": -1
+            }
+
+            mlf_opt = create_monthly_mlf(params)
+            
+            max_len = forecast_df.groupby('unique_id').size().max()
+            required_len = val_months + 3
+            if max_len < required_len:
+                logger.warning(f"Dataset too small for optimization CV (max {max_len} months). Need {required_len}. Returning inf.")
+                return float('inf')
+                
+            try:
+                cv_res = mlf_opt.cross_validation(
+                    df=forecast_df,
+                    h=val_months,
+                    n_windows=1,
+                    static_features=static_cols
+                )
+                cv_res['y'] = np.expm1(cv_res['y'])
+                cv_res['LGBMRegressor'] = np.expm1(cv_res['LGBMRegressor'])
+                mae = mean_absolute_error(cv_res["y"], cv_res["LGBMRegressor"])
+                return mae
+            except Exception as e:
+                logger.warning(f"Trial failed during cross validation: {e}")
+                return float("inf")
+
+        logger.info(f"Starting Optuna optimization with {n_trials} trials...")
+        study = optuna.create_study(direction="minimize")
+        study.optimize(objective, n_trials=n_trials, n_jobs=4, show_progress_bar=True)
+
+        best_params = study.best_params
+        best_params["random_state"] = 42
+        best_params["verbose"] = -1
+        best_params["n_jobs"] = -1
+        logger.info(f"Best parameters found: {best_params}")
+        logger.info(f"Best Validation MAE: {study.best_value}")
+    else:
+        best_params = {
+            "n_estimators": 100, 
+            "learning_rate": 0.05, 
+            "max_depth": 4, 
+            "random_state": 42, 
+            "verbose": -1,
+            "n_jobs": -1
+        }
+        logger.info(f"Using default parameters: {best_params}")
+
+    mlf = create_monthly_mlf(best_params)
+
+    if validate and not optimize:
+        max_len = forecast_df.groupby('unique_id').size().max()
+        required_len = val_months + 3 # val_months + 2 lags + 1 training sample
+        if max_len < required_len:
+            logger.warning(f"Dataset too small for validation (max {max_len} months per device). Need at least {required_len}. Skipping validation.")
+        else:
+            logger.info(f"Running cross-validation on the last {val_months} months...")
+            try:
+                cv_res = mlf.cross_validation(
+                    df=forecast_df,
+                    h=val_months,
+                    n_windows=1,
+                    static_features=static_cols
+                )
+                cv_res['y'] = np.expm1(cv_res['y'])
+                cv_res['LGBMRegressor'] = np.expm1(cv_res['LGBMRegressor'])
+                mae = mean_absolute_error(cv_res["y"], cv_res["LGBMRegressor"])
+                logger.info(f"Validation MAE (Monthly, last {val_months} months): {mae}")
+            except Exception as e:
+                logger.error(f"Error during validation: {e}")
 
     logger.info("Training final monthly LightGBM model...")
     mlf.fit(forecast_df, static_features=static_cols)
@@ -150,8 +208,8 @@ def train_and_forecast_monthly_lgbm(df: pl.DataFrame, artifacts_dir: str, valida
     predictions['prediction'] = np.expm1(predictions['LGBMRegressor'])
     return predictions
 
-def train_and_forecast_monthly_prophet(df: pl.DataFrame, validate: bool = False):
-    logger.info(f"Setting up monthly Prophet pipeline (Validate={validate})...")
+def train_and_forecast_monthly_prophet(df: pl.DataFrame, validate: bool = False, val_months: int = 2):
+    logger.info(f"Setting up monthly Prophet pipeline (Validate={validate}, Horizon={val_months} months)...")
     train_df = df.rename(
         {"deviceId": "unique_id", "Month_Start": "ds", "x2_mean": "y"}
     ).to_pandas()
@@ -162,14 +220,13 @@ def train_and_forecast_monthly_prophet(df: pl.DataFrame, validate: bool = False)
     all_predictions = []
     val_maes = []
     h_months = 12
-    val_months = 6
     
     for device_id in device_ids:
         device_df = train_df[train_df['unique_id'] == device_id][['ds', 'y']].dropna().sort_values('ds')
         
         if validate:
             if len(device_df) <= val_months + 1:
-                logger.warning(f"Device {device_id} does not have enough data for validation. Skipping validation.")
+                logger.warning(f"Device {device_id} does not have enough data for validation (needs >{val_months + 1} months). Skipping validation.")
                 fit_df = device_df
                 run_val = False
             else:
@@ -212,16 +269,19 @@ def train_and_forecast_monthly_prophet(df: pl.DataFrame, validate: bool = False)
             logger.error(f"Prophet failed for device {device_id}: {e}")
             
     if validate and val_maes:
-        logger.info(f"Validation MAE (Monthly, last 6 months) across valid devices: {np.mean(val_maes)}")
+        logger.info(f"Validation MAE (Monthly, last {val_months} months) across valid devices: {np.mean(val_maes)}")
             
     return pd.concat(all_predictions, ignore_index=True)
 
 def main():
     parser = argparse.ArgumentParser(description="Run the monthly time series forecasting pipeline.")
-    parser.add_argument("--data_path", type=str, default="data/subsample_data.csv", help="Path to the input CSV data.")
+    parser.add_argument("--data_path", type=str, default="data/data.csv", help="Path to the input CSV data.")
     parser.add_argument("--artifacts_dir", type=str, default="artifacts", help="Directory to store artifacts and logs.")
     parser.add_argument("--model", type=str, choices=["lgbm", "prophet"], default="lgbm", help="Choose the model to run.")
-    parser.add_argument("--validate", action="store_true", help="Run validation on the last 6 months of the training set.")
+    parser.add_argument("--validate", action="store_true", help="Run validation on the hold-out set.")
+    parser.add_argument("--val_months", type=int, default=2, help="Number of months to hold out for validation.")
+    parser.add_argument("--optimize", action="store_true", help="Run Optuna hyperparameter optimization before training.")
+    parser.add_argument("--n_trials", type=int, default=20, help="Number of Optuna trials.")
     args = parser.parse_args()
 
     os.makedirs(args.artifacts_dir, exist_ok=True)
@@ -232,9 +292,9 @@ def main():
     df = process_monthly(lazy_df)
     
     if args.model == "lgbm":
-        predictions = train_and_forecast_monthly_lgbm(df, args.artifacts_dir, validate=args.validate)
+        predictions = train_and_forecast_monthly_lgbm(df, args.artifacts_dir, validate=args.validate, val_months=args.val_months, optimize=args.optimize, n_trials=args.n_trials)
     else:
-        predictions = train_and_forecast_monthly_prophet(df, validate=args.validate)
+        predictions = train_and_forecast_monthly_prophet(df, validate=args.validate, val_months=args.val_months)
     
     # Format output
     predictions['year'] = predictions['ds'].dt.year

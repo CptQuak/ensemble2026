@@ -26,6 +26,18 @@ def train_model(df: pl.DataFrame, optimize: bool = False, n_trials: int = 20) ->
     # mlforecast takes a pandas dataframe by default
     forecast_df_pd = forecast_df.to_pandas()
 
+    # Ensure there are no missing periods in the time series (required by MLForecast cross_validation)
+    forecast_df_pd = (
+        forecast_df_pd.set_index('ds')
+        .groupby('unique_id')
+        .resample('1h')
+        .ffill()
+        .drop(columns='unique_id', errors='ignore')
+        .reset_index()
+    )
+    # Forward fill handles missing inner values, but we also ensure trailing/leading nans are filled if any
+    forecast_df_pd['y'] = forecast_df_pd.groupby('unique_id')['y'].bfill()
+
     if optimize:
         def objective(trial):
             params = {

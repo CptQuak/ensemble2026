@@ -14,4 +14,4 @@ module add GCCcore/13.2.0 Python/3.11.5
 export PATH="$SCRATCH/bin:$PATH"
 export UV_CACHE_DIR=$SCRATCH/task3/.uv_cache
 # Run your prediction pipeline
-uv run main.py --data_path data/data.csv --optimize
+uv run main.py --data_path data/data.csv

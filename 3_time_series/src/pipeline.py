@@ -26,7 +26,7 @@ def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False):
 
     # 3. Forecasting
     try:
-        predictions = generate_forecasts(mlf, h=6)
+        predictions = generate_forecasts(mlf, df, h=6)
     except Exception as e:
         logger.error(f"Pipeline failed during forecasting: {e}")
         return

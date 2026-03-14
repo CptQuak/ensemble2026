@@ -128,7 +128,9 @@ def generate_neural_forecasts(nf: NeuralForecast, df: pl.DataFrame) -> pd.DataFr
     
     if dyn_cols:
         future_df['hour'] = future_df['ds'].dt.hour
-        hist_avg = forecast_df_pd.groupby(['unique_id', 'hour'])[dyn_cols].mean().reset_index()
+        # Exclude 'hour' from dyn_cols during aggregation if it's already there
+        agg_cols = [c for c in dyn_cols if c != 'hour']
+        hist_avg = forecast_df_pd.groupby(['unique_id', 'hour'])[agg_cols].mean().reset_index()
         future_df = future_df.merge(hist_avg, on=['unique_id', 'hour'], how='left')
         
         device_mean = forecast_df_pd.groupby('unique_id')[dyn_cols].mean()

@@ -12,7 +12,7 @@ from mlforecast import MLForecast
 from lightgbm import LGBMRegressor
 from prophet import Prophet
 from neuralforecast import NeuralForecast
-from neuralforecast.models import NBEATS
+from neuralforecast.models import NBEATS, NBEATSx
 
 from src.data_processing import load_data
 
@@ -343,11 +343,97 @@ def train_and_forecast_monthly_nbeats(df: pl.DataFrame, validate: bool = False, 
     predictions['prediction'] = np.expm1(predictions['NBEATS'])
     return predictions
 
+def train_and_forecast_monthly_nbeatsx(df: pl.DataFrame, validate: bool = False, val_months: int = 2):
+    logger.info(f"Setting up monthly NBEATSx pipeline (Validate={validate}, Horizon={val_months} months)...")
+    train_df = df.rename(
+        {"deviceId": "unique_id", "Month_Start": "ds", "x2_mean": "y"}
+    ).to_pandas()
+    
+    train_df['ds'] = pd.to_datetime(train_df['ds']).astype('datetime64[ns]')
+    train_df['y'] = np.log1p(train_df['y'])
+    
+    if 'deviceType' in train_df.columns:
+        train_df['deviceType'] = pd.factorize(train_df['deviceType'], sort=True)[0]
+        
+    static_cols = ["deviceType", "region", "consumption_segment"]
+    static_cols = [c for c in static_cols if c in train_df.columns]
+    dyn_cols = [c for c in train_df.columns if c not in ['unique_id', 'ds', 'y'] + static_cols]
+    
+    all_exog = static_cols + dyn_cols
+    
+    # We only need to predict up to October 2025 (which is 6 months from May)
+    h_months = 6
+    
+    if validate:
+        logger.info(f"Running NBEATSx validation on the last {val_months} months...")
+        min_len = train_df.groupby('unique_id').size().min()
+        if min_len <= val_months + 1:
+            logger.warning(f"Dataset too small for validation (min length {min_len}). Skipping validation.")
+        else:
+            fit_df = train_df.groupby('unique_id').head(-val_months).reset_index(drop=True)
+            val_df = train_df.groupby('unique_id').tail(val_months).reset_index(drop=True)
+            
+            model_val = NBEATSx(h=val_months, input_size=1, max_steps=100, futr_exog_list=all_exog)
+            nf_val = NeuralForecast(models=[model_val], freq='MS')
+            
+            import logging
+            logging.getLogger('pytorch_lightning').setLevel(logging.ERROR)
+            
+            nf_val.fit(df=fit_df)
+            forecast_val = nf_val.predict(df=fit_df, futr_df=val_df.drop(columns=['y'], errors='ignore'))
+            
+            if 'unique_id' not in forecast_val.columns:
+                forecast_val = forecast_val.reset_index(names='unique_id')
+                
+            merged = forecast_val.merge(val_df[['unique_id', 'ds', 'y']], on=['unique_id', 'ds'])
+            mae = mean_absolute_error(np.expm1(merged['y']), np.expm1(merged['NBEATSx']))
+            logger.info(f"Validation MAE (Monthly, last {val_months} months) NBEATSx: {mae}")
+            
+    logger.info("Training final monthly NBEATSx model...")
+    model_final = NBEATSx(h=h_months, input_size=1, max_steps=100, futr_exog_list=all_exog)
+    nf_final = NeuralForecast(models=[model_final], freq='MS')
+    
+    import logging
+    logging.getLogger('pytorch_lightning').setLevel(logging.ERROR)
+    
+    nf_final.fit(df=train_df)
+    
+    # Create futr_df for NBEATSx
+    futr_df = nf_final.make_future_dataframe(df=train_df)
+    static_mapping = train_df[['unique_id'] + static_cols].drop_duplicates('unique_id')
+    futr_df = futr_df.merge(static_mapping, on='unique_id', how='left')
+    
+    if dyn_cols:
+        train_df['month'] = train_df['ds'].dt.month
+        futr_df['month'] = futr_df['ds'].dt.month
+        
+        hist_avg = train_df.groupby(['unique_id', 'month'])[dyn_cols].mean().reset_index()
+        futr_df = futr_df.merge(hist_avg, on=['unique_id', 'month'], how='left')
+        
+        device_mean = train_df.groupby('unique_id')[dyn_cols].mean()
+        overall_mean = train_df[dyn_cols].mean()
+        
+        for col in dyn_cols:
+            device_mean_map = futr_df['unique_id'].map(device_mean[col])
+            futr_df[col] = futr_df[col].fillna(device_mean_map)
+            futr_df[col] = futr_df[col].fillna(overall_mean[col])
+            
+        futr_df = futr_df.drop(columns=['month'])
+        train_df = train_df.drop(columns=['month'])
+        
+    predictions = nf_final.predict(df=train_df, futr_df=futr_df)
+    
+    if 'unique_id' not in predictions.columns:
+        predictions = predictions.reset_index(names='unique_id')
+        
+    predictions['prediction'] = np.expm1(predictions['NBEATSx'])
+    return predictions
+
 def main():
     parser = argparse.ArgumentParser(description="Run the monthly time series forecasting pipeline.")
     parser.add_argument("--data_path", type=str, default="data/data.csv", help="Path to the input CSV data.")
     parser.add_argument("--artifacts_dir", type=str, default="artifacts", help="Directory to store artifacts and logs.")
-    parser.add_argument("--model", type=str, choices=["lgbm", "prophet", "nbeats"], default="lgbm", help="Choose the model to run.")
+    parser.add_argument("--model", type=str, choices=["lgbm", "prophet", "nbeats", "nbeatsx"], default="lgbm", help="Choose the model to run.")
     parser.add_argument("--validate", action="store_true", help="Run validation on the hold-out set.")
     parser.add_argument("--val_months", type=int, default=2, help="Number of months to hold out for validation.")
     parser.add_argument("--optimize", action="store_true", help="Run Optuna hyperparameter optimization before training.")
@@ -367,6 +453,8 @@ def main():
         predictions = train_and_forecast_monthly_prophet(df, validate=args.validate, val_months=args.val_months)
     elif args.model == "nbeats":
         predictions = train_and_forecast_monthly_nbeats(df, validate=args.validate, val_months=args.val_months)
+    elif args.model == "nbeatsx":
+        predictions = train_and_forecast_monthly_nbeatsx(df, validate=args.validate, val_months=args.val_months)
     
     # Format output
     predictions['year'] = predictions['ds'].dt.year

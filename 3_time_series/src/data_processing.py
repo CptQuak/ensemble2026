@@ -1,5 +1,6 @@
 import polars as pl
 from loguru import logger
+from datetime import datetime
 
 def load_data(data_path: str) -> pl.LazyFrame:
     logger.info("Setting up lazy data processing...")
@@ -16,6 +17,7 @@ def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
         lazy_df.with_columns(
             pl.col("timedate").str.strip_suffix(" UTC").str.to_datetime()
         )
+        .filter(pl.col("timedate") < datetime(2025, 5, 1))
         .sort(["deviceId", "timedate"])
         .with_columns(
             pl.col("x2")

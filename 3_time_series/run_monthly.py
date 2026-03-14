@@ -297,6 +297,7 @@ def train_and_forecast_monthly_nbeats(df: pl.DataFrame, validate: bool = False, 
     
     train_df['ds'] = pd.to_datetime(train_df['ds']).astype('datetime64[ns]')
     train_df['y'] = np.log1p(train_df['y'])
+    train_df = train_df.sort_values(['unique_id', 'ds']).reset_index(drop=True)
     
     # We only need to predict up to October 2025 (which is 6 months from May)
     h_months = 6
@@ -351,6 +352,7 @@ def train_and_forecast_monthly_nbeatsx(df: pl.DataFrame, validate: bool = False,
     
     train_df['ds'] = pd.to_datetime(train_df['ds']).astype('datetime64[ns]')
     train_df['y'] = np.log1p(train_df['y'])
+    train_df = train_df.sort_values(['unique_id', 'ds']).reset_index(drop=True)
     
     if 'deviceType' in train_df.columns:
         train_df['deviceType'] = pd.factorize(train_df['deviceType'], sort=True)[0]

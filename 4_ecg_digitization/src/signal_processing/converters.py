@@ -52,6 +52,9 @@ class SignalConverter:
         Eliminuje Temporal Shift w metryce Cross-Correlation. [cite: 157, 171]
         """
         num_pixels = len(signal_mv)
+        if num_pixels < 2:
+            return np.zeros(0, dtype=np.float16)
+        
         current_len_mm = num_pixels / target_px_per_mm
         
         # 1. Obliczenie docelowej liczby próbek (dokładnie 20 próbek na 1 mm) [cite: 162]

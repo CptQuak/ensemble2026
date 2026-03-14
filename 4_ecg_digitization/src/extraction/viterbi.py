@@ -16,6 +16,8 @@ class ViterbiExtractor:
         roi_gray: oryginalny wycinek w skali szarości (do oceny luminancji)
         """
         h, w = roi_mask.shape
+        if w == 0:
+            return np.zeros(0, dtype=np.float32)
         
         # 1. Definicja stanów (węzłów) w każdej kolumnie
         # Dla każdej kolumny znajdujemy klastry (bloby) aktywnych pikseli.

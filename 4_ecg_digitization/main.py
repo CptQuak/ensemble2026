@@ -100,8 +100,16 @@ def process_record(image_path, record_name, submission_obj):
             
             # 5. Ekstrakcja danych algorytmem Viterbiego
             margin = 10 
-            roi_mask_trimmed = segments_mask[lead_name][:, margin:-margin]
-            roi_gray_trimmed = segments_gray[lead_name][:, margin:-margin]
+            segment_w = segments_mask[lead_name].shape[1]
+            if segment_w <= 2 * margin:
+                margin = max(0, segment_w // 2 - 1)
+                
+            if margin > 0:
+                roi_mask_trimmed = segments_mask[lead_name][:, margin:-margin]
+                roi_gray_trimmed = segments_gray[lead_name][:, margin:-margin]
+            else:
+                roi_mask_trimmed = segments_mask[lead_name]
+                roi_gray_trimmed = segments_gray[lead_name]
             
             signal_px_trimmed = ViterbiExtractor.extract_signal(
                 roi_mask_trimmed, 
@@ -110,7 +118,10 @@ def process_record(image_path, record_name, submission_obj):
                 lead_name=lead_name
             )
             
-            signal_px_raw = np.pad(signal_px_trimmed, (margin, margin), mode='edge')
+            if margin > 0:
+                signal_px_raw = np.pad(signal_px_trimmed, (margin, margin), mode='edge')
+            else:
+                signal_px_raw = signal_px_trimmed
             
             # Overlay diagnostyczny
             img_roi = segments_bgr[lead_name]

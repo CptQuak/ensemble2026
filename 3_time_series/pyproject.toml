@@ -3,13 +3,18 @@ name = "3-time-series"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "~=3.13"
 dependencies = [
+    "ipykernel>=7.2.0",
     "jupyterlab>=4.5.6",
+    "lightgbm>=4.3.0",
+    "loguru>=0.7.2",
     "matplotlib>=3.10.8",
     "mlforecast>=1.0.2",
     "numpy>=2.4.3",
+    "pandas>=3.0.1",
     "polars>=1.39.0",
+    "pyarrow>=23.0.1",
     "seaborn>=0.13.2",
     "statsforecast>=2.0.3",
 ]

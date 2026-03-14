@@ -6,7 +6,7 @@ from src.data_processing import load_data, process_and_aggregate
 from src.model_training import train_model
 from src.forecasting import generate_forecasts
 
-def run_pipeline(data_path: str, artifacts_dir: str):
+def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False):
     logger.info("Starting data processing pipeline...")
 
     # 1. Data Processing
@@ -19,7 +19,7 @@ def run_pipeline(data_path: str, artifacts_dir: str):
 
     # 2. Model Training
     try:
-        mlf = train_model(df)
+        mlf = train_model(df, optimize=optimize)
     except Exception as e:
         logger.error(f"Pipeline failed during model training: {e}")
         return

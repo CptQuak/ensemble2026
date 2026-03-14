@@ -28,9 +28,11 @@ dependencies = [
     { name = "matplotlib" },
     { name = "mlforecast" },
     { name = "numpy" },
+    { name = "optuna" },
     { name = "pandas" },
     { name = "polars" },
     { name = "pyarrow" },
+    { name = "scikit-learn" },
     { name = "seaborn" },
     { name = "statsforecast" },
 ]
@@ -44,9 +46,11 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "mlforecast", specifier = ">=1.0.2" },
     { name = "numpy", specifier = ">=2.4.3" },
+    { name = "optuna", specifier = ">=4.7.0" },
     { name = "pandas", specifier = ">=3.0.1" },
     { name = "polars", specifier = ">=1.39.0" },
     { name = "pyarrow", specifier = ">=23.0.1" },
+    { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "statsforecast", specifier = ">=2.0.3" },
 ]

@@ -9,32 +9,36 @@ from sklearn.metrics import mean_absolute_error
 import numpy as np
 import holidays
 
+def _to_dt_index(ds):
+    return pd.DatetimeIndex(ds)
+
 def is_weekend(ds: pd.Series) -> np.ndarray:
-    return ds.dt.dayofweek.isin([5, 6]).astype(np.int8).values
+    return _to_dt_index(ds).dayofweek.isin([5, 6]).astype(np.int8)
 
 def is_holiday(ds: pd.Series) -> np.ndarray:
-    years = ds.dt.year.unique().tolist()
+    idx = _to_dt_index(ds)
+    years = idx.year.unique().tolist()
     # Using Poland's holiday calendar as specified
     holidays_dict = holidays.Poland(years=years)
-    return ds.dt.date.map(lambda x: x in holidays_dict).astype(np.int8).values
+    return np.array([x in holidays_dict for x in idx.date], dtype=np.int8)
 
 def hour_sin(ds: pd.Series) -> np.ndarray:
-    return np.sin(2 * np.pi * ds.dt.hour / 24).values
+    return np.sin(2 * np.pi * _to_dt_index(ds).hour.values / 24)
 
 def hour_cos(ds: pd.Series) -> np.ndarray:
-    return np.cos(2 * np.pi * ds.dt.hour / 24).values
+    return np.cos(2 * np.pi * _to_dt_index(ds).hour.values / 24)
 
 def dayofweek_sin(ds: pd.Series) -> np.ndarray:
-    return np.sin(2 * np.pi * ds.dt.dayofweek / 7).values
+    return np.sin(2 * np.pi * _to_dt_index(ds).dayofweek.values / 7)
 
 def dayofweek_cos(ds: pd.Series) -> np.ndarray:
-    return np.cos(2 * np.pi * ds.dt.dayofweek / 7).values
+    return np.cos(2 * np.pi * _to_dt_index(ds).dayofweek.values / 7)
 
 def dayofyear_sin(ds: pd.Series) -> np.ndarray:
-    return np.sin(2 * np.pi * ds.dt.dayofyear / 365.25).values
+    return np.sin(2 * np.pi * _to_dt_index(ds).dayofyear.values / 365.25)
 
 def dayofyear_cos(ds: pd.Series) -> np.ndarray:
-    return np.cos(2 * np.pi * ds.dt.dayofyear / 365.25).values
+    return np.cos(2 * np.pi * _to_dt_index(ds).dayofyear.values / 365.25)
 
 def create_mlforecast_model(params: dict) -> MLForecast:
     return MLForecast(

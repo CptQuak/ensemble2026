@@ -11,7 +11,7 @@ def load_data(data_path: str) -> pl.LazyFrame:
         raise
 
 def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
-    logger.info("Aggregating data monthly...")
+    logger.info("Aggregating data hourly...")
     processed_lazy = (
         lazy_df.with_columns(
             pl.col("timedate").str.strip_suffix(" UTC").str.to_datetime()
@@ -23,8 +23,8 @@ def process_and_aggregate(lazy_df: pl.LazyFrame) -> pl.DataFrame:
             .fill_null(strategy="backward")
             .over("deviceId")
         )
-        .with_columns(pl.col("timedate").dt.truncate("1mo").alias("Month_Start"))
-        .group_by(["deviceId", "Month_Start"])
+        .with_columns(pl.col("timedate").dt.truncate("1h").alias("Hour_Start"))
+        .group_by(["deviceId", "Hour_Start"])
         .agg(pl.col("x2").mean().alias("x2_mean"))
     )
 

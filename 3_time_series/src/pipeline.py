@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from loguru import logger
 
-from src.data_processing import load_data, process_and_aggregate
+from src.data_processing import load_data, process_and_aggregate, compute_monthly_features
 from src.model_training import train_model
 from src.forecasting import generate_forecasts
 from src.baseline import run_baseline_model
@@ -10,7 +10,35 @@ from src.baseline import run_baseline_model
 def run_pipeline(data_path: str, artifacts_dir: str, optimize: bool = False, validate: bool = False, model_type: str = "mlforecast"):
     logger.info("Starting data processing pipeline...")
 
-    # 1. Data Processing
+    if model_type == "monthly":
+        try:
+            lazy_df = load_data(data_path)
+            train_monthly, forecast_monthly = compute_monthly_features(lazy_df)
+        except Exception as e:
+            logger.error(f"Pipeline failed during monthly feature computation: {e}")
+            return
+
+        from src.monthly_regression import lomocv_validate, train_monthly_model, predict_monthly
+        try:
+            if validate:
+                logger.info("Running leave-one-month-out cross-validation...")
+                lomocv_validate(train_monthly)
+
+            lgb_model, ridge_model, feature_cols, temp_mean_cols, scaler = train_monthly_model(train_monthly)
+            predictions = predict_monthly(lgb_model, ridge_model, feature_cols, temp_mean_cols, scaler, forecast_monthly)
+        except Exception as e:
+            logger.error(f"Pipeline failed during monthly regression: {e}")
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = os.path.join(artifacts_dir, f"run_{timestamp}")
+        os.makedirs(run_dir, exist_ok=True)
+        predictions_path = os.path.join(run_dir, "predictions.csv")
+        predictions.to_csv(predictions_path, index=False)
+        logger.success(f"Predictions saved to {predictions_path}")
+        return
+
+    # 1. Data Processing (legacy path for all other model types)
     try:
         lazy_df = load_data(data_path)
         df = process_and_aggregate(lazy_df)

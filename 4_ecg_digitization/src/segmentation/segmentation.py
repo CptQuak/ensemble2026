@@ -9,6 +9,8 @@ class ECGSegmenter:
     @staticmethod
     def save_debug_image(image, path):
         """Zapisuje wycięty segment obrazu jako .png."""
+        if os.environ.get("DEBUG_MODE", "0") != "1":
+            return
         os.makedirs(os.path.dirname(path), exist_ok=True)
         cv2.imwrite(path, image)
 
@@ -69,7 +71,7 @@ class ECGSegmenter:
             row_boundaries.append((int(y_start), int(y_end)))
 
         # 6. Wizualizacja kroku: step3a_row_projection.png
-        if record_name:
+        if record_name and os.environ.get("DEBUG_MODE", "0") == "1":
             path = os.path.join(debug_folder, record_name, "step3a_row_projection.png")
             os.makedirs(os.path.dirname(path), exist_ok=True)
             
@@ -155,7 +157,7 @@ class ECGSegmenter:
             col_boundaries.append((final_cuts[i], final_cuts[i+1]))
 
         # Wizualizacja - tu zobaczysz czerwone kropki na szczytach
-        if record_name:
+        if record_name and os.environ.get("DEBUG_MODE", "0") == "1":
             plt.figure(figsize=(15, 3))
             plt.plot(smoothed, color='black')
             plt.scatter(peaks, smoothed[peaks], color='red', s=50) # To są nasze kotwice

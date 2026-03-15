@@ -46,7 +46,7 @@ class GridDetector:
         kernel = np.ones((2, 2), np.uint8)
         cleaned_grid = cv2.morphologyEx(combined_grid_mask, cv2.MORPH_OPEN, kernel)
         
-        if record_name:
+        if record_name and os.environ.get("DEBUG_MODE", "0") == "1":
             path_prefix = os.path.join(debug_folder, record_name)
             os.makedirs(path_prefix, exist_ok=True)
             cv2.imwrite(f"{path_prefix}/step1a_grid_color_mask.png", grid_color_mask)
@@ -75,7 +75,7 @@ class GridDetector:
         vertical_lines = cv2.dilate(vertical_lines, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 1)))
         horizontal_lines = cv2.dilate(horizontal_lines, cv2.getStructuringElement(cv2.MORPH_RECT, (1, 3)))
         
-        if record_name:
+        if record_name and os.environ.get("DEBUG_MODE", "0") == "1":
             path_prefix = os.path.join(debug_folder, record_name)
             cv2.imwrite(f"{path_prefix}/step1d_vertical_lines.png", vertical_lines)
             cv2.imwrite(f"{path_prefix}/step1e_horizontal_lines.png", horizontal_lines)

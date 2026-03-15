@@ -133,13 +133,11 @@ def process_record(image_path, record_name, submission_obj):
             
             # Przekazujemy x_start (globalną pozycję na obrazie), aby usunąć Temporal Shift
             signal_final = SignalConverter.resample_to_500hz_anchored(
-                signal_mv, 
-                start_x_global=x_start, 
-                target_px_per_mm=TARGET_PX_PER_MM,
-                record_name=record_name, 
-                lead_name=lead_name
-            )
-            
+                signal_mv,
+                start_x_global=x_start,
+                is_rhythm_strip=(len(leads) == 1),
+                target_px_per_mm=TARGET_PX_PER_MM
+            )            
             submission_obj.add_lead(record_name, lead_name, signal_final)
 
     ECGVisualizer.save_debug_image(grid_debug_img, f"output/debug/{record_name}/step3c_segmentation_grid.png")

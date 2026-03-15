@@ -7,6 +7,8 @@ class ECGPreprocessor:
     
     @staticmethod
     def save_debug_image(image, path):
+        if os.environ.get("DEBUG_MODE", "0") != "1":
+            return
         os.makedirs(os.path.dirname(path), exist_ok=True)
         cv2.imwrite(path, image)
 

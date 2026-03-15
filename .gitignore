@@ -71,4 +71,3 @@ venv.bak/
 train
 small_train
 data/.gitkeep
-output

@@ -45,7 +45,7 @@ class GridBuilder:
         x_peaks, x_proj = GridBuilder._find_line_centers(vertical_lines_mask, axis=0, min_distance=15)
         y_peaks, y_proj = GridBuilder._find_line_centers(horizontal_lines_mask, axis=1, min_distance=15)
         
-        if record_name:
+        if record_name and os.environ.get("DEBUG_MODE", "0") == "1":
             path_prefix = os.path.join(debug_folder, record_name)
             os.makedirs(path_prefix, exist_ok=True)
             
@@ -108,7 +108,7 @@ class GridBuilder:
                         dy = int(M["m01"] / M["m00"]) - search_radius
                         snapped_matrix[r, c] = [cx + dx, cy + dy]
 
-        if record_name:
+        if record_name and os.environ.get("DEBUG_MODE", "0") == "1":
             # Wizualizacja odtworzonej i dociągniętej siatki
             debug_img = np.zeros((*intersections_mask.shape, 3), dtype=np.uint8)
             

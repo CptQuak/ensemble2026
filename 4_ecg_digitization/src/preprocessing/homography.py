@@ -27,15 +27,21 @@ class HomographyWarp:
     def undistort_image_grid(image_bgr, nodes_matrix, cell_size_mm=5, target_px_per_mm=20):
         rows, cols, _ = nodes_matrix.shape
         
-        # ZABEZPIECZENIE: Jeśli siatka ma mniej niż 2 linie w dowolnym kierunku, nie da się stworzyć kwadratu
-        if rows < 2 or cols < 2:
+        # ZABEZPIECZENIE: Jeśli siatka ma mniej niż 10 linii w dowolnym kierunku, nie da się bezpiecznie jej użyć
+        if rows < 10 or cols < 10:
             print("  [Warning] Zbyt mało węzłów siatki do homografii. Zwracam oryginał.")
             return image_bgr
 
         target_cell_px = int(cell_size_mm * target_px_per_mm)
-        
+
         dst_width = int((cols - 1) * target_cell_px)
         dst_height = int((rows - 1) * target_cell_px)
+
+        # Jeśli znaleziona siatka jest za mała w stosunku do obrazu, ignorujemy ją, 
+        # bo moglibyśmy drastycznie zmniejszyć rozdzielczość sygnału
+        if dst_width < image_bgr.shape[1] * 0.5 or dst_height < image_bgr.shape[0] * 0.5:
+            print("  [Warning] Wykryta siatka jest zbyt mała. Zwracam oryginał.")
+            return image_bgr
         
         # Dodatkowe sprawdzenie przed alokacją pamięci
         if dst_width <= 0 or dst_height <= 0:

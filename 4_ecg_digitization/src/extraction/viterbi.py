@@ -102,7 +102,7 @@ class ViterbiExtractor:
             curr_idx = parent[x][curr_idx]
 
         # 5. Diagnostyka (zapis wizualizacji)
-        if record_name and lead_name:
+        if record_name and lead_name and os.environ.get("DEBUG_MODE", "0") == "1":
             path_dir = os.path.join(debug_folder, record_name)
             os.makedirs(path_dir, exist_ok=True)
             plt.figure(figsize=(10, 2))

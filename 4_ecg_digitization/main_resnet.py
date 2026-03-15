@@ -61,8 +61,9 @@ def process_record(image_path, record_name, submission_obj, model=None, device=N
         mask_resnet_bin = (mask_resnet > 0.5).astype(np.uint8) * 255
         
         # Zapisz debug maski ResNet
-        os.makedirs(f"output/debug/{record_name}", exist_ok=True)
-        cv2.imwrite(f"output/debug/{record_name}/step2_resnet_mask.png", mask_resnet_bin)
+        if os.environ.get("DEBUG_MODE", "0") == "1":
+            os.makedirs(f"output/debug/{record_name}", exist_ok=True)
+            cv2.imwrite(f"output/debug/{record_name}/step2_resnet_mask.png", mask_resnet_bin)
 
         mask_segmentation = mask_resnet_bin
         mask_extraction = mask_resnet_bin
@@ -154,11 +155,16 @@ def process_record(image_path, record_name, submission_obj, model=None, device=N
             ECGVisualizer.save_debug_image(diag_overlay, f"output/debug/{record_name}/overlay_{lead_name}.png")
             
             # 6. Kalibracja i Resampling
-            signal_mv = SignalConverter.px_to_mv(signal_px_raw, TARGET_PX_PER_MM, record_name=record_name, lead_name=lead_name)
-            
+            signal_mv = SignalConverter.px_to_mv(signal_px_raw, TARGET_PX_PER_MM)
+
             len_mm = len(signal_px_raw) / TARGET_PX_PER_MM
-            signal_final = SignalConverter.resample_to_500hz(signal_mv, len_mm, record_name=record_name, lead_name=lead_name)
-            
+            # Replace resample_to_500hz with resample_to_500hz_anchored because resample_to_500hz doesn't exist.
+            signal_final = SignalConverter.resample_to_500hz_anchored(
+                signal_mv,
+                start_x_global=x_start,
+                is_rhythm_strip=(len(leads) == 1),
+                target_px_per_mm=TARGET_PX_PER_MM
+            )            
             submission_obj.add_lead(record_name, lead_name, signal_final)
 
     ECGVisualizer.save_debug_image(grid_debug_img, f"output/debug/{record_name}/step3c_segmentation_grid.png")

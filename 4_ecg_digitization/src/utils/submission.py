@@ -11,6 +11,8 @@ class ECGSubmission:
     @staticmethod
     def save_debug_image(signals_dict, record_name, path):
         """Zapisuje wizualizację finalnych sygnałów z submission jako .png."""
+        if os.environ.get("DEBUG_MODE", "0") != "1":
+            return
         os.makedirs(os.path.dirname(path), exist_ok=True)
         prefix = f"{record_name}_"
         leads = [k[len(prefix):] for k in signals_dict.keys() if k.startswith(prefix)]

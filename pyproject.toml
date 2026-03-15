@@ -14,3 +14,8 @@ dependencies = [
     "polars>=1.39.0",
     "scikit-learn>=1.8.0",
 ]
+
+[tool.uv.workspace]
+members = [
+    "3_time_series",
+]
